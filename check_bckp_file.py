@@ -9,6 +9,8 @@ from datetime import date, time, datetime, timedelta
 import collections
 import configparser
 
+from setuptools.command.test import test
+
 """
  Le but : lire une liste de sauvegardes, en extraire des noms de fichier :
  - la date,
@@ -188,6 +190,8 @@ flist =  [
 '2019_04_29_14_00_41_E12_LABSED2019-02-prod.zip',
 ]
 
+
+
 class obj_fname(object):
     def __init__(self, fname=False, basename=False):
         self.string = fname
@@ -221,6 +225,7 @@ class obj_fname(object):
             self.uid = self.date_str + self.time_str
 
 class rule(object):
+
     def __init__(self, _name=False, _type=False, _number=False, _params=False):
         self.name = _name
         self.type = self.set_type(_type)
@@ -228,6 +233,8 @@ class rule(object):
         self.keep_min = self.set_number(_number)
         self.keep_max = self.set_number(_number)
         self.policy = self.set_params(_params)
+        self.start_date = False
+        self.end_date = False
 
     def set_type(self, type):
         if type not in ['day', 'week', 'month', 'year']:
@@ -255,8 +262,9 @@ class set_of_rules(object):
     month_define = False
     year_define = False
     align_calendar = True
-    ending_deleting_files = False
+    delete_files = False
     dir_to_archive_files = False
+    start_yesterday = False # True : start applaying rules from yesterday, False: start from le youngest file
 
     def __init__(self, name=False, _day=None, _week=None, _month=None, _year=None):
         self.setname = name
@@ -322,8 +330,9 @@ def get_default_conf():
 [params]
 default_basename = 
 align_calendar = True
-ending_Deleting_files = False
+delete_files = False
 dir_to_archive_files = ./archived
+start_yesterday = False 
      
 [dayly]
 keep = 7
@@ -362,10 +371,12 @@ def read_config(filename='check_bckp_file.conf', setOfRules='Rules'):
                 setattr(cur_rule, option, config.get(section, option))
                 print('rule:', cur_rule.name, 'option:', option + ':', cur_rule.__getattribute__(option))
             s_of_r.set_rule(cur_rule.type, cur_rule)
+
     print('defined rules:', s_of_r.setname, '\n day :', s_of_r.day_define, \
                             '\n week :', s_of_r.week_define, \
                             '\n month :', s_of_r.month_define, \
                             '\n year :', s_of_r.year_define)
+    return s_of_r
 
 
 def write_defaultconfig(filename='check_bckp_file.conf'):
@@ -373,6 +384,46 @@ def write_defaultconfig(filename='check_bckp_file.conf'):
     with open(filename, 'w') as configfile:
         config.write(configfile)
 
+
+def compute_start_end_dates(sor: set_of_rules, first_objfn: obj_fname):
+    if sor.start_yesterday:
+        td = datetime.today()
+        start_date = datetime(td.year, td.month, td.day - 1, 23,59,59)
+    else:
+        start_date = first_objfn.datetime
+    cur_start_date = cur_end_date = start_date
+    for rule in sor:
+        cur_start_date = cur_end_date
+        rule.start_date = cur_start_date
+        if rule.type == 'day':
+            td = timedelta(days=rule.keep)
+            cur_end_date = cur_start_date - td
+            if sor.align_calendar:
+                dt = timedelta(days=cur_end_date.isocalendar()[2])
+                cur_end_date -= dt
+        elif rule.type == 'week':
+            td = timedelta(weeks=rule.keep)
+            cur_end_date = cur_start_date - td
+        elif rule.type == 'week':
+            td = timedelta(month=rule.keep)
+            cur_end_date = cur_start_date - td
+        elif rule.type == 'week':
+            td = timedelta(y=0 - rule.keep)
+        rule.end_date = cur_end_date
+
+
+def test_create_file_list(flist, path=False):
+    if path:
+        try:
+            os.chdir(path)
+        except:
+            os.mkdir(path)
+            test_create_file_list(flist, path)
+            return True
+    for filename in flist:
+        corpus = 'This is a file test for file: ' + filename + '\n'
+        with open(filename, 'w') as test_file:
+            test_file.write(corpus)
 
 def generate_test_list(nombase, dayh=[0,12], nbdays=500, sd=datetime.today()):
     def strf(l):
@@ -384,7 +435,6 @@ def generate_test_list(nombase, dayh=[0,12], nbdays=500, sd=datetime.today()):
         for h in dayh:
             dt = timedelta(days=day, hours=24-h)
             cd = dstart - dt
-            # ltp = strf([cd.year, cd.month, cd.day, cd.hour, cd.minute, cd.second])
             fname = "_".join(strf([cd.year, cd.month, cd.day, cd.hour, cd.minute, cd.second]) + [nombase + ".zip"])
             flist.append(fname)
     return flist
@@ -407,17 +457,19 @@ def main(arguments):
     print(args)
     basename = args.Invariant
     print(basename)
-    # print(get_file_list())
-    # flist = generate_test_list(basename, nbdays=500,dayh=[2,10,13, 16])
-    # printlist(flist, enum=True)
-    # flist_basename = [e for e in flist if not (re.search(basename, e)==None)]
-    # # print(flist_basename)
-    # tobj = collections.namedtuple('tupleobj','uid objfn')
-    # olist = [tobj(o.uid, o) for o in [obj_fname(fn, basename) for fn in flist_basename]]
-    # olist = sorted(olist, key=lambda tuplefn: tuplefn.uid, reverse=True)
-    # printlist(olist, enum=True)
-    write_defaultconfig()
-    read_config(setOfRules='My_RULES')
+    #write_defaultconfig()
+    s_of_r = read_config(setOfRules='My_RULES')
+    flist = generate_test_list(basename, nbdays=500,dayh=[2,10,13, 16])
+    test_create_file_list(flist, './test_dir')
+    flist_from_dir = get_file_list()
+    printlist(flist_from_dir, enum=True)
+    printlist(flist_from_dir, enum=True)
+    flist_basename = [e for e in flist_from_dir if not (re.search(basename, e)==None)]
+    printlist(flist_basename)
+    tobj = collections.namedtuple('tupleobj','uid objfn')
+    olist = [tobj(int(o.uid), o) for o in [obj_fname(fn, basename) for fn in flist_basename]]
+    olist = sorted(olist, key=lambda tuplefn: tuplefn.uid, reverse=True)
+    printlist(olist, enum=True)
 
 
 if __name__ == '__main__':

@@ -6,6 +6,7 @@ import os, re
 import sys
 import argparse
 from datetime import date, time, datetime, timedelta
+from dateutil.relativedelta import *
 import collections
 import configparser
 
@@ -256,10 +257,13 @@ class rule(object):
         else:
             return params
 
+
 class set_of_rules(object):
     day_define = False
     week_define = False
     month_define = False
+    each_ended_month = True
+    each_ended_year = True
     year_define = False
     align_calendar = True
     delete_files = False
@@ -333,6 +337,8 @@ align_calendar = True
 delete_files = False
 dir_to_archive_files = ./archived
 start_yesterday = False 
+each_ended_month = True
+each_ended_year = True
      
 [dayly]
 keep = 7
@@ -343,6 +349,7 @@ keep = 4
 policy = last
 
 [monthly]
+keep = 12
 keep_max = 11
 keep_min = 6
 policy = last
@@ -386,30 +393,61 @@ def write_defaultconfig(filename='check_bckp_file.conf'):
 
 
 def compute_start_end_dates(sor: set_of_rules, first_objfn: obj_fname):
+    isocal = {'curyear': 0, 'weeknum': 1, 'weekday': 2}
     if sor.start_yesterday:
         td = datetime.today()
         start_date = datetime(td.year, td.month, td.day - 1, 23,59,59)
     else:
         start_date = first_objfn.datetime
     cur_start_date = cur_end_date = start_date
-    for rule in sor:
+    minus_1 = timedelta(days=1)
+
+    sor_list = [getattr(sor, attribute) for attribute in ['day', 'week', 'month', 'year']]
+
+    for rule in sor_list:
         cur_start_date = cur_end_date
         rule.start_date = cur_start_date
         if rule.type == 'day':
-            td = timedelta(days=rule.keep)
+            td = timedelta(days=int(rule.keep))
             cur_end_date = cur_start_date - td
             if sor.align_calendar:
-                dt = timedelta(days=cur_end_date.isocalendar()[2])
+                #set end_date to the first day of current week
+                dt = timedelta(days=cur_end_date.isocalendar()[isocal['weekday']])
                 cur_end_date -= dt
+
         elif rule.type == 'week':
-            td = timedelta(weeks=rule.keep)
+            td = timedelta(weeks=int(rule.keep))
             cur_end_date = cur_start_date - td
-        elif rule.type == 'week':
-            td = timedelta(month=rule.keep)
-            cur_end_date = cur_start_date - td
-        elif rule.type == 'week':
-            td = timedelta(y=0 - rule.keep)
-        rule.end_date = cur_end_date
+            if sor.align_calendar:
+                #set end_date to the first day of current week
+                dt = timedelta(days=cur_end_date.isocalendar()[isocal['weekday']])
+                cur_end_date -= dt
+
+        elif rule.type == 'month':
+            if sor.each_ended_month:
+                # this option assume that start_date is the last day of previous month
+                # even if weeks keeping go more further than this date
+                # note the use of 'start_date' instead of 'cur_start_date'
+                td = relativedelta(day=1) + relativedelta(days=1)
+                cur_start_date =  start_date - td  # go to the last day of previous month
+            td = relativedelta(months=int(rule.keep), day=1)
+            cur_end_date -= td
+
+
+        elif rule.type == 'year':
+            if sor.each_ended_year:
+                # this option assume that start_date is the last day of previous month
+                # even if weeks keeping go more further than this date
+                # note the use of 'start_date' instead of 'cur_start_date'
+                td = relativedelta(month=1, day=1) + relativedelta(days=1)
+                cur_start_date = start_date - td  # go to the last day of previous year
+            td = relativedelta(years=int(rule.keep), day=1)
+            cur_end_date -= td
+
+        rule.start_date, rule.end_date = cur_start_date, cur_end_date
+        print('Type={0} ; keep={1}; debut={2} ; fin={3}'.format(rule.type, rule.keep, rule.start_date, rule.end_date))
+        cur_end_date -= minus_1 # go to day before to start next rule
+
 
 
 def test_create_file_list(flist, path=False):
@@ -470,7 +508,7 @@ def main(arguments):
     olist = [tobj(int(o.uid), o) for o in [obj_fname(fn, basename) for fn in flist_basename]]
     olist = sorted(olist, key=lambda tuplefn: tuplefn.uid, reverse=True)
     printlist(olist, enum=True)
-
+    compute_start_end_dates(s_of_r, olist[0].objfn)
 
 if __name__ == '__main__':
     sys.exit(main(sys.argv[1:]))

@@ -268,49 +268,59 @@ class set_of_rules(object):
     align_calendar = True
     delete_files = False
     dir_to_archive_files = False
-    start_yesterday = False # True : start applaying rules from yesterday, False: start from le youngest file
+    start_yesterday = False # True : start applying rules from yesterday, False: start from le youngest file
+    period_name = {'dayly': 'day', 'weekly': 'week', 'monthly': 'month', 'yearly': 'year'}
+    inv_period_name = dict([val, key] for key, val in period_name.items())
 
-    def __init__(self, name=False, _day=None, _week=None, _month=None, _year=None):
-        self.setname = name
-        self.day = None # self.set_rule('day', _day)
-        self.week = None # self.set_rule('week', _week)
-        self.month = None # self.set_rule('month', _month)
-        self.year = None # self.set_rule('year', _year)
+    def __init__(self, _file_name):
+        self.file_name = _file_name
+        self.dictOfRules = {}
 
-    def set_rule(self, _type, _rule):
-        if set_of_rules.year_define == False:
-            if not isinstance(_rule, rule):
+    def check_args(self, rule=None, type=False, name=False):
+        if rule != None:
+            if not isinstance(rule, rule):
                 raise TypeError("An instancied object of class 'rule' need to be passed")
-            elif _type not in ['day', 'week', 'month', 'year']:
+        if type:
+            if type not in self.period_name.values():
                 raise ValueError("erreur de type de regle \n must be in ['day', 'week', 'month', 'year']")
+        if name:
+            if name not in self.dictOfRules[type].keys():
+                raise ValueError("Le nom de la règle est inconnu dans " & self.dictOfRules[type].keys())
+        return True
+
+    def add_rule(self, _name, _type, _rule=None):
+        if _name == False:
+            _name = set_of_rules.period_name[_type]
+        elif self.check_args(type=_type):
+            _rule = _rule if _rule != None else rule(_name, _type)
+            self.dictOfRules[_rule.type] = {_rule.name: _rule}
+            print(self.dictOfRules)
+
+
+    def get_rule(self, _type, _name):
+        if self.check_args(type=_type, name=_name):
+            return self.dictOfRules[_type][_name]
+
+    def get_list_of_rules(self):
+        # return [rule_dict.values() for rule_dict in list(self.dictOfRules.values())]
+        return [list(self.dictOfRules[key].values())[0] for key in self.dictOfRules.keys()]
+
+    def get_type_dict(self, _type):
+        if self.check_args(type=_type):
+            return self.dictOfRules[_type]
+
+    def modify_rule(self, _type, _name, _rule, _newname=False):
+        if self.check_args(type=_type, name=_name, rule=_rule):
+            if _newname != False:
+                self.dictOfRules[_type][_newname] = self.dictOfRules[_type].pop(_name)
             else:
-                if _type == 'day':
-                    self.day = _rule
-                    set_of_rules.day_define = True
-                elif _type == 'week':
-                    self.week = _rule
-                    set_of_rules.week_define = True
-                elif _type == 'month':
-                    self.month = _rule
-                    set_of_rules.month_define = True
-                elif _type == 'year':
-                    self.year = _rule
-                    set_of_rules.year_define = True
-        else:
-            try:
-                raise PermissionError("Rule allreday exisitng .. try modify_rule()")
-            except PermissionError:
-                print("Exception Object allreday set")
-                raise
+                self.dictOfRules[_type][_name] = _rule
 
-    def get_rule(self, _type, _param):
-        pass
+    def delete_rule(self, _type, _name):
+        if self.check_args(type=_type, rule=_rule):
+            self.dictOfRules[_type].pop(_name)
 
-    def modify_rule(self, type, _param):
-        pass
 
-    def delete_rule(self, type):
-        pass
 
 def get_file_list(path=False):
     if path:
@@ -359,30 +369,29 @@ keep = 10
 policy = last
 """
     parser.read_string(defaultConfig)
-    return  parser
+    return parser
 
 def read_config(filename='check_bckp_file.conf', setOfRules='Rules'):
     config = configparser.ConfigParser()
     config.read(filename)
     s_of_r = set_of_rules(setOfRules)
-    type = {'params':'param', 'dayly': 'day', 'weekly': 'week', 'monthly': 'month', 'yearly': 'year'}
+    # type = {'params':'param', 'dayly': 'day', 'weekly': 'week', 'monthly': 'month', 'yearly': 'year'}
     for section in config.sections():
         if section == 'params':
             for option in config[section]:
                 setattr(s_of_r, option, config.get(section, option))
                 print(option + ':', s_of_r.__getattribute__(option))
         else:
-            print()
-            cur_rule = rule(_name=section, _type = type[section])
+            s_of_r.add_rule(_name=section, _type=s_of_r.period_name[section])
+            cur_rule = s_of_r.get_rule(_name=section, _type=s_of_r.period_name[section])
             for option in config[section]:
                 setattr(cur_rule, option, config.get(section, option))
                 print('rule:', cur_rule.name, 'option:', option + ':', cur_rule.__getattribute__(option))
-            s_of_r.set_rule(cur_rule.type, cur_rule)
 
-    print('defined rules:', s_of_r.setname, '\n day :', s_of_r.day_define, \
-                            '\n week :', s_of_r.week_define, \
-                            '\n month :', s_of_r.month_define, \
-                            '\n year :', s_of_r.year_define)
+    # print('defined rules:', s_of_r.setname, '\n day :', s_of_r.day_define, \
+    #                         '\n week :', s_of_r.week_define, \
+    #                         '\n month :', s_of_r.month_define, \
+    #                         '\n year :', s_of_r.year_define)
     return s_of_r
 
 
@@ -400,53 +409,53 @@ def compute_start_end_dates(sor: set_of_rules, first_objfn: obj_fname):
     else:
         start_date = first_objfn.datetime
     cur_start_date = cur_end_date = start_date
-    minus_1 = timedelta(days=1)
+    _minus_One = timedelta(days=1)
 
-    sor_list = [getattr(sor, attribute) for attribute in ['day', 'week', 'month', 'year']]
+    print("--------calcul des dates des regles------------")
 
-    for rule in sor_list:
+    sor_list = sor.get_list_of_rules()
+    for cur_rule in sor_list:
         cur_start_date = cur_end_date
-        rule.start_date = cur_start_date
-        if rule.type == 'day':
-            td = timedelta(days=int(rule.keep))
+        cur_rule.start_date = cur_start_date
+        if cur_rule.type == 'day':
+            td = timedelta(days=int(cur_rule.keep))
             cur_end_date = cur_start_date - td
             if sor.align_calendar:
-                #set end_date to the first day of current week
+                # set end_date to the first day of current week
                 dt = timedelta(days=cur_end_date.isocalendar()[isocal['weekday']])
                 cur_end_date -= dt
 
-        elif rule.type == 'week':
-            td = timedelta(weeks=int(rule.keep))
+        elif cur_rule.type == 'week':
+            td = timedelta(weeks=int(cur_rule.keep))
             cur_end_date = cur_start_date - td
             if sor.align_calendar:
-                #set end_date to the first day of current week
+                # set end_date to the first day of current week
                 dt = timedelta(days=cur_end_date.isocalendar()[isocal['weekday']])
                 cur_end_date -= dt
 
-        elif rule.type == 'month':
+        elif cur_rule.type == 'month':
             if sor.each_ended_month:
                 # this option assume that start_date is the last day of previous month
                 # even if weeks keeping go more further than this date
                 # note the use of 'start_date' instead of 'cur_start_date'
                 td = relativedelta(day=1) + relativedelta(days=1)
-                cur_start_date =  start_date - td  # go to the last day of previous month
-            td = relativedelta(months=int(rule.keep), day=1)
+                cur_start_date = start_date - td  # go to the last day of previous month
+            td = relativedelta(months=int(cur_rule.keep), day=1)
             cur_end_date -= td
 
-
-        elif rule.type == 'year':
+        elif cur_rule.type == 'year':
             if sor.each_ended_year:
                 # this option assume that start_date is the last day of previous month
                 # even if weeks keeping go more further than this date
                 # note the use of 'start_date' instead of 'cur_start_date'
                 td = relativedelta(month=1, day=1) + relativedelta(days=1)
                 cur_start_date = start_date - td  # go to the last day of previous year
-            td = relativedelta(years=int(rule.keep), day=1)
+            td = relativedelta(years=int(cur_rule.keep), day=1)
             cur_end_date -= td
 
-        rule.start_date, rule.end_date = cur_start_date, cur_end_date
-        print('Type={0} ; keep={1}; debut={2} ; fin={3}'.format(rule.type, rule.keep, rule.start_date, rule.end_date))
-        cur_end_date -= minus_1 # go to day before to start next rule
+        cur_rule.start_date, cur_rule.end_date = cur_start_date, cur_end_date
+        print('Type={0} \t keep={1} \t debut={2} \t fin={3}'.format(cur_rule.type, cur_rule.keep, cur_rule.start_date, cur_rule.end_date))
+        cur_end_date -= _minus_One  # go to day before to start next cur_rule
 
 
 
@@ -496,7 +505,7 @@ def main(arguments):
     basename = args.Invariant
     print(basename)
     #write_defaultconfig()
-    s_of_r = read_config(setOfRules='My_RULES')
+    s_of_r = read_config(setOfRules='My_RULES')  # Ok
     flist = generate_test_list(basename, nbdays=500,dayh=[2,10,13, 16])
     test_create_file_list(flist, './test_dir')
     flist_from_dir = get_file_list()
@@ -509,6 +518,7 @@ def main(arguments):
     olist = sorted(olist, key=lambda tuplefn: tuplefn.uid, reverse=True)
     printlist(olist, enum=True)
     compute_start_end_dates(s_of_r, olist[0].objfn)
+
 
 if __name__ == '__main__':
     sys.exit(main(sys.argv[1:]))

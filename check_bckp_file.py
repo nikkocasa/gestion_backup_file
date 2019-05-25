@@ -571,10 +571,6 @@ def set_2keep_2del(olist, setofrule):
     s_o_r = setofrule.get_list_of_rules()
     for rule in s_o_r:
         cur_startdate, cur_enddate = rule.get_startdate(uid_format=False), rule.get_enddate(uid_format=False)
-        # date_dict = dict(zip(['all', 'first', 'last', 'fisrt_last'],
-        #                       [None, listdate(rule.first_list),
-        #                        listdate(rule.last_list),
-        #                        listdate(rule.first_list + rule.last_list)]))
         date_list = rule.first_list if rule.policy == 'first' else rule.last_list
         date_list += rule.first_list if rule.policy == 'first_last' else []
         cur_list = {k.date():[] for k in date_list} if rule.policy != 'all' else {'all':[]}
@@ -595,12 +591,21 @@ def set_2keep_2del(olist, setofrule):
                             is_date_in(o.objfn.date, rule.last_list):
                         cur_list[o.objfn.date].append(o.objfn)
 
-        for ld in
-        if rule.policy == 'first':
-            cur_list[rule.policy].sort(key=lambda o: o.datetime)
+        lv = cur_list.values()
+        for key, dl in cur_list.items():
+            dl.sort(key=lambda o: o.datetime, reverse=True)
+            #apply final cut
+            if len(dl) == 0:
+                continue
+            elif rule.policy == 'first':
+                cur_list[key] = dl.pop(-1)
+            elif rule.policy == 'last':
+                cur_list[key] = dl.pop(-1)
+            elif rule.policy == 'first_last':
+                cur_list[key] = [dl.pop(-1), dl.pop(0)]
 
-
-        to_keep[rule.type] = cur_list
+        to_keep[rule.type] = [fn for fn in [el for el in cur_list.values()]]
+        print(to_keep)
 
 
 

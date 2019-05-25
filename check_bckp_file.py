@@ -223,7 +223,11 @@ class obj_fname(object):
             self.datetime = datetime(self.y, self.m, self.d, self.h, self.mm, self.s)
             self.date_str = ''.join(datetime_list[0:3])
             self.time_str = ''.join(datetime_list[3:])
-            self.uid = self.date_str + self.time_str
+            self.uid = int(self.datetime.strftime('%Y%m%d%H%M%S'))
+
+    def get_uid_from_datetime(_dt):
+        if _dt:
+            return int(_dt.strftime('%Y%m%d%H%M%S'))
 
 class rule(object):
 
@@ -231,11 +235,14 @@ class rule(object):
         self.name = _name
         self.type = self.set_type(_type)
         self.keep = self.set_number(_number)
+        self.keep_iso = self.set_number(_number)
         self.keep_min = self.set_number(_number)
         self.keep_max = self.set_number(_number)
         self.policy = self.set_params(_params)
         self.start_date = False
         self.end_date = False
+        self.first_list = []
+        self.last_list = []
 
     def set_type(self, type):
         if type not in ['day', 'week', 'month', 'year']:
@@ -257,6 +264,17 @@ class rule(object):
         else:
             return params
 
+    def get_startdate(self, uid_format=False):
+        if uid_format:
+            return obj_fname.get_uid_from_datetime(self.start_date)
+        else:
+            return self.start_date
+
+    def get_enddate(self, uid_format=False):
+        if uid_format:
+            return obj_fname.get_uid_from_datetime(self.end_date)
+        else:
+            return self.end_date
 
 class set_of_rules(object):
     day_define = False
@@ -417,6 +435,7 @@ def compute_start_end_dates(sor: set_of_rules, first_objfn: obj_fname):
     for cur_rule in sor_list:
         cur_start_date = cur_end_date
         cur_rule.start_date = cur_start_date
+        cur_rule.keep_iso = cur_rule.keep
         if cur_rule.type == 'day':
             td = timedelta(days=int(cur_rule.keep))
             cur_end_date = cur_start_date - td
@@ -424,6 +443,18 @@ def compute_start_end_dates(sor: set_of_rules, first_objfn: obj_fname):
                 # set end_date to the first day of current week
                 dt = timedelta(days=cur_end_date.isocalendar()[isocal['weekday']])
                 cur_end_date -= dt
+                cur_rule.keep_iso = int(cur_rule.keep) + dt.days
+
+            cur_rule.last_list = []
+            for i in range(0,int(cur_rule.keep_iso)):
+                dt = timedelta(days=i)
+                cur_rule.last_list.append((cur_start_date - dt).replace(hour=23, minute=59, second=59))
+                print('last_days: \t', cur_rule.last_list[-1])
+            cur_rule.first_list = []
+            for i in range(0,int(cur_rule.keep_iso)):
+                dt = timedelta(days=i+1)
+                cur_rule.first_list.append((cur_end_date + dt).replace(hour=0, minute=0, second=0))
+                print('first_days: \t', cur_rule.first_list[-1])
 
         elif cur_rule.type == 'week':
             td = timedelta(weeks=int(cur_rule.keep))
@@ -431,7 +462,21 @@ def compute_start_end_dates(sor: set_of_rules, first_objfn: obj_fname):
             if sor.align_calendar:
                 # set end_date to the first day of current week
                 dt = timedelta(days=cur_end_date.isocalendar()[isocal['weekday']])
+                cur_date_week_number = datetime.date(cur_end_date).isocalendar()[1]
                 cur_end_date -= dt
+                cur_rule.keep_iso = int(cur_rule.keep) - datetime.date(cur_end_date).isocalendar()[1] \
+                                                       + cur_date_week_number
+
+            cur_rule.last_list = []
+            for i in range(0,int(cur_rule.keep_iso)):
+                dt = timedelta(days=i*7)
+                cur_rule.last_list.append((cur_start_date - dt).replace(hour=23, minute=59, second=59))
+                print('last_weeks: \t', cur_rule.last_list[-1])
+            cur_rule.first_list = []
+            for i in range(0,int(cur_rule.keep_iso)):
+                dt = timedelta(days=i*7)
+                cur_rule.first_list.append((cur_end_date + dt).replace(hour=0, minute=0, second=0))
+                print('first_weeks: \t', cur_rule.first_list[-1])
 
         elif cur_rule.type == 'month':
             if sor.each_ended_month:
@@ -443,6 +488,17 @@ def compute_start_end_dates(sor: set_of_rules, first_objfn: obj_fname):
             td = relativedelta(months=int(cur_rule.keep), day=1)
             cur_end_date -= td
 
+            cur_rule.last_list = []
+            for i in range(0,int(cur_rule.keep_iso)):
+                dt = relativedelta(months=i-1, day=1) + relativedelta(days=1)
+                cur_rule.last_list.append((cur_start_date - dt).replace(hour=23, minute=59, second=59))
+                print('last monthes: \t', cur_rule.last_list[-1])
+            cur_rule.first_list = []
+            for i in range(0,int(cur_rule.keep_iso)):
+                dt = relativedelta(months=i+1, day=1)
+                cur_rule.first_list.append((cur_end_date + dt).replace(hour=0, minute=0, second=0))
+                print('first_monthes: \t', cur_rule.first_list[-1])
+
         elif cur_rule.type == 'year':
             if sor.each_ended_year:
                 # this option assume that start_date is the last day of previous month
@@ -453,8 +509,26 @@ def compute_start_end_dates(sor: set_of_rules, first_objfn: obj_fname):
             td = relativedelta(years=int(cur_rule.keep), day=1)
             cur_end_date -= td
 
+            cur_rule.last_list = []
+            for i in range(0,int(cur_rule.keep_iso)):
+                dt = relativedelta(year=i, day=635)
+                cur_rule.last_list.append((cur_start_date - dt).replace(hour=23, minute=59, second=59))
+                print('last years: \t', cur_rule.last_list[-1])
+            cur_rule.first_list = []
+            for i in range(0,int(cur_rule.keep_iso)):
+                dt = relativedelta(year=i, month=1, day=1)
+                cur_rule.first_list.append((cur_end_date + dt).replace(hour=0, minute=0, second=0))
+                print('first years: \t', cur_rule.first_list[-1])
+
         cur_rule.start_date, cur_rule.end_date = cur_start_date, cur_end_date
-        print('Type={0} \t keep={1} \t debut={2} \t fin={3}'.format(cur_rule.type, cur_rule.keep, cur_rule.start_date, cur_rule.end_date))
+
+        print('-' * 100)
+        print('Type={0} \t keep={1} \t debut={2} \t fin={3} \t (Policy={4})'.format(cur_rule.type,
+                                                                                 cur_rule.keep,
+                                                                                 cur_rule.start_date,
+                                                                                 cur_rule.end_date,
+                                                                                 cur_rule.policy))
+        print('=' * 100)
         cur_end_date -= _minus_One  # go to day before to start next cur_rule
 
 
@@ -486,6 +560,51 @@ def generate_test_list(nombase, dayh=[0,12], nbdays=500, sd=datetime.today()):
             flist.append(fname)
     return flist
 
+def set_2keep_2del(olist, setofrule):
+    def is_date_in(d, l):
+        return d in [d.date() for d in l]
+    def listdate(l):
+        return [d.date() for d in l]
+
+    to_keep = {'day':{}, 'week':{}, 'month':{}, 'year':{}}
+    to_del = []
+    s_o_r = setofrule.get_list_of_rules()
+    for rule in s_o_r:
+        cur_startdate, cur_enddate = rule.get_startdate(uid_format=False), rule.get_enddate(uid_format=False)
+        # date_dict = dict(zip(['all', 'first', 'last', 'fisrt_last'],
+        #                       [None, listdate(rule.first_list),
+        #                        listdate(rule.last_list),
+        #                        listdate(rule.first_list + rule.last_list)]))
+        date_list = rule.first_list if rule.policy == 'first' else rule.last_list
+        date_list += rule.first_list if rule.policy == 'first_last' else []
+        cur_list = {k.date():[] for k in date_list} if rule.policy != 'all' else {'all':[]}
+        for o in olist:
+            # take care that end date is smaller than start date
+            if o.objfn.datetime <= cur_startdate and o.objfn.datetime >= cur_enddate:
+                #calculate option paramters
+                if rule.policy == 'all':
+                    cur_list['all'].append(o.objfn)
+                elif rule.policy == 'first':
+                    if is_date_in(o.objfn.date, rule.first_list):
+                        cur_list[o.objfn.date].append(o.objfn)
+                elif rule.policy == 'last':
+                    if is_date_in(o.objfn.date, rule.last_list):
+                        cur_list[o.objfn.date].append(o.objfn)
+                elif rule.policy == 'first_last':
+                    if is_date_in(o.objfn.date, rule.first_list) or\
+                            is_date_in(o.objfn.date, rule.last_list):
+                        cur_list[o.objfn.date].append(o.objfn)
+
+        for ld in
+        if rule.policy == 'first':
+            cur_list[rule.policy].sort(key=lambda o: o.datetime)
+
+
+        to_keep[rule.type] = cur_list
+
+
+
+
 
 
 def main(arguments):
@@ -509,15 +628,15 @@ def main(arguments):
     flist = generate_test_list(basename, nbdays=500,dayh=[2,10,13, 16])
     test_create_file_list(flist, './test_dir')
     flist_from_dir = get_file_list()
-    printlist(flist_from_dir, enum=True)
-    printlist(flist_from_dir, enum=True)
+    # printlist(flist_from_dir, enum=True)
     flist_basename = [e for e in flist_from_dir if not (re.search(basename, e)==None)]
-    printlist(flist_basename)
+    # printlist(flist_basename)
     tobj = collections.namedtuple('tupleobj','uid objfn')
     olist = [tobj(int(o.uid), o) for o in [obj_fname(fn, basename) for fn in flist_basename]]
     olist = sorted(olist, key=lambda tuplefn: tuplefn.uid, reverse=True)
-    printlist(olist, enum=True)
+    # printlist(olist, enum=True)
     compute_start_end_dates(s_of_r, olist[0].objfn)
+    set_2keep_2del(olist, s_of_r)
 
 
 if __name__ == '__main__':

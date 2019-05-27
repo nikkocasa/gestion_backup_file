@@ -8,6 +8,7 @@ import argparse
 from datetime import date, time, datetime, timedelta
 from dateutil.relativedelta import *
 import collections
+from collections import Iterable
 import configparser
 
 from setuptools.command.test import test
@@ -567,7 +568,7 @@ def set_2keep_2del(olist, setofrule):
         return [d.date() for d in l]
 
     to_keep = {'day':{}, 'week':{}, 'month':{}, 'year':{}}
-    to_del = []
+    to_del, keeped = [], []
     s_o_r = setofrule.get_list_of_rules()
     for rule in s_o_r:
         cur_startdate, cur_enddate = rule.get_startdate(uid_format=False), rule.get_enddate(uid_format=False)
@@ -591,23 +592,34 @@ def set_2keep_2del(olist, setofrule):
                             is_date_in(o.objfn.date, rule.last_list):
                         cur_list[o.objfn.date].append(o.objfn)
 
-        lv = cur_list.values()
         for key, dl in cur_list.items():
             dl.sort(key=lambda o: o.datetime, reverse=True)
             #apply final cut
+            cur_obj = False
             if len(dl) == 0:
                 continue
             elif rule.policy == 'first':
-                cur_list[key] = dl.pop(-1)
+                cur_obj = dl[-1]
             elif rule.policy == 'last':
-                cur_list[key] = dl.pop(-1)
+                cur_obj = dl[0]
             elif rule.policy == 'first_last':
-                cur_list[key] = [dl.pop(-1), dl.pop(0)]
+                cur_obj = [dl[-1], dl[-1]]
+            if cur_obj:
+                cur_list[key] = cur_obj
 
-        to_keep[rule.type] = [fn for fn in [el for el in cur_list.values()]]
-        print(to_keep)
+        # to_keep[rule.type] = [fn for fn in [el for el in cur_list.values()]]
+        keeped.append(list(flatten(cur_list.values())))
 
+        print(keeped)
 
+def flatten(items):
+    """Yield items from any nested iterable; see Reference."""
+    for x in items:
+        if isinstance(x, Iterable) and not isinstance(x, (str, bytes)):
+            for sub_x in flatten(x):
+                yield sub_x
+        else:
+            yield x
 
 
 

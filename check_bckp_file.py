@@ -2,16 +2,16 @@
 # -*- coding: utf-8 -*-
 
 # from __future__ import print_function
-import os, re
+import os, shutil, re
 import sys
 import argparse
 from datetime import date, time, datetime, timedelta
 from dateutil.relativedelta import *
 import collections
-from collections import Iterable
+from collections.abc import Iterable
 import configparser
-
-from setuptools.command.test import test
+import logging
+# from setuptools.command.test import test
 
 """
  Le but : lire une liste de sauvegardes, en extraire des noms de fichier :
@@ -196,25 +196,25 @@ flist =  [
 
 class obj_fname(object):
     def __init__(self, fname=False, basename=False):
-        self.string = fname
-        self.datetime = datetime(1900,1,1,0,0,0)
-        self.date = date(1900,1,1)
-        self.date_str = False
-        self.time_str = False
+        self.filename = fname
+        self.datetime = datetime(2000,1,1,0,0,0)
+        self.date = date(2000,1,1)
+        # self.date_str = False
+        # self.time_str = False
         self.hour = time(0,0,0)
         self.y, self.m, self.d = 0,0,0
         self.h, self.mm, self.s = 0,0,0
         self.dbname = basename
-        self.dayly_keep = False
-        self.weekly_keep = False
-        self.monthly_keep = False
-        self.yearly_keep = False
+        # self.dayly_keep = False
+        # self.weekly_keep = False
+        # self.monthly_keep = False
+        # self.yearly_keep = False
         self.uid = False
         if fname and basename:
             self.set_extract_values(fname, basename)
 
     def set_extract_values(self, str=False, dbn=False):
-        str_fname = self.string if not str else str
+        str_fname = self.filename if not str else str
         str_basename = self.dbname if not dbn else dbn
         if str_fname and str_basename and not (re.search(str_basename, str_fname)==None):
             datetime_list = re.findall('\d+',re.sub(str_basename, '', str_fname))
@@ -222,8 +222,8 @@ class obj_fname(object):
             self.date = date(self.y, self.m, self.d)
             self.time = time(self.h, self.mm, self.s)
             self.datetime = datetime(self.y, self.m, self.d, self.h, self.mm, self.s)
-            self.date_str = ''.join(datetime_list[0:3])
-            self.time_str = ''.join(datetime_list[3:])
+            # self.date_str = ''.join(datetime_list[0:3])
+            # self.time_str = ''.join(datetime_list[3:])
             self.uid = int(self.datetime.strftime('%Y%m%d%H%M%S'))
 
     def get_uid_from_datetime(_dt):
@@ -342,10 +342,7 @@ class set_of_rules(object):
 
 
 def get_file_list(path=False):
-    if path:
-        os.chdir(path)
-    flist = os.listdir()
-    return flist
+    return os.listdir(path) if path else False
 
 
 def printlist(l, enum=False):
@@ -365,6 +362,7 @@ default_basename =
 align_calendar = True
 delete_files = False
 dir_to_archive_files = ./archived
+log_file = gestion_backup_file.log
 start_yesterday = False 
 each_ended_month = True
 each_ended_year = True
@@ -535,16 +533,14 @@ def compute_start_end_dates(sor: set_of_rules, first_objfn: obj_fname):
 
 
 def test_create_file_list(flist, path=False):
-    if path:
+    if path and not os.path.exists(path):
         try:
-            os.chdir(path)
-        except:
             os.mkdir(path)
-            test_create_file_list(flist, path)
-            return True
+        except:
+            sys.exit(1)
     for filename in flist:
         corpus = 'This is a file test for file: ' + filename + '\n'
-        with open(filename, 'w') as test_file:
+        with open(os.path.join(path,filename), 'w') as test_file:
             test_file.write(corpus)
 
 def generate_test_list(nombase, dayh=[0,12], nbdays=500, sd=datetime.today()):
@@ -564,18 +560,15 @@ def generate_test_list(nombase, dayh=[0,12], nbdays=500, sd=datetime.today()):
 def set_2keep_2del(olist, setofrule):
     def is_date_in(d, l):
         return d in [d.date() for d in l]
-    def listdate(l):
-        return [d.date() for d in l]
-
-    to_keep = {'day':{}, 'week':{}, 'month':{}, 'year':{}}
-    to_del, keeped = [], []
+    keeped = []
     s_o_r = setofrule.get_list_of_rules()
     for rule in s_o_r:
         cur_startdate, cur_enddate = rule.get_startdate(uid_format=False), rule.get_enddate(uid_format=False)
         date_list = rule.first_list if rule.policy == 'first' else rule.last_list
         date_list += rule.first_list if rule.policy == 'first_last' else []
+        # creating a dict keys on eache dates, values list of file found at that date
         cur_list = {k.date():[] for k in date_list} if rule.policy != 'all' else {'all':[]}
-        for o in olist:
+        for o in olist: # then feeding the dict
             # take care that end date is smaller than start date
             if o.objfn.datetime <= cur_startdate and o.objfn.datetime >= cur_enddate:
                 #calculate option paramters
@@ -591,26 +584,29 @@ def set_2keep_2del(olist, setofrule):
                     if is_date_in(o.objfn.date, rule.first_list) or\
                             is_date_in(o.objfn.date, rule.last_list):
                         cur_list[o.objfn.date].append(o.objfn)
-
+        # then, as the list by dates is done, keeping only files in accordance with policy rule
         for key, dl in cur_list.items():
+            # sorting list for current date newer (last) in first place
             dl.sort(key=lambda o: o.datetime, reverse=True)
             #apply final cut
             cur_obj = False
             if len(dl) == 0:
                 continue
             elif rule.policy == 'first':
-                cur_obj = dl[-1]
+                cur_obj = dl[-1]  # keeping older
             elif rule.policy == 'last':
-                cur_obj = dl[0]
+                cur_obj = dl[0]  # keeping newer
             elif rule.policy == 'first_last':
-                cur_obj = [dl[-1], dl[-1]]
+                cur_obj = [dl[-1], dl[-1]]  # keeping both
             if cur_obj:
                 cur_list[key] = cur_obj
 
         # to_keep[rule.type] = [fn for fn in [el for el in cur_list.values()]]
-        keeped.append(list(flatten(cur_list.values())))
-
-        print(keeped)
+        ll = list(flatten(cur_list.values()))
+        keeped.append(ll)
+    # tobj = collections.namedtuple('tupleobj','uid objfn')
+    # return [tobj(int(o.uid), o) for o in list(flatten(keeped))]
+    return [int(o.uid) for o in list(flatten(keeped))]
 
 def flatten(items):
     """Yield items from any nested iterable; see Reference."""
@@ -630,21 +626,38 @@ def main(arguments):
         description="Apply some rules (default or stored) to manage rolling backup file on days,weeks,monthes ans years",
         formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('Invariant', help="Name of the file bakuped inside all current bachup file's name")
+    parser.add_argument('Bckpfiles_path', help="Path to directory containing the files bakuped")
     parser.add_argument('-r', '--rulesFile', help="Name of the file containing rules", type=argparse.FileType('r'))
     parser.add_argument('-d', '--defaultrules', help="Display default rules")
+    parser.add_argument('-a', '--archdir', help="set archive path for non deletion option", default='./archived')
     parser.add_argument('-l', '--logfile', help="log file",
                         default=sys.stdout, type=argparse.FileType('w'))
-
     args = parser.parse_args(arguments)
+    if os.path.exists(os.path.realpath(args.Bckpfiles_path)):
+        wrkdir = os.path.realpath(args.Bckpfiles_path)
+    else:
+       write_defaultconfig()
+       raise ValueError(args.Bckpfiles_path + " does'nt exist.\nDefault example config file have been written")
 
-    print(args)
+    if args.rulesFile != None and os.path.exists(os.path.realpath(args.rulesFile.name)):
+        s_of_r = read_config(os.path.realpath(args.rulesFile.name), setOfRules='MyRules')
+    else:
+        raise ValueError(' option -r or RuleFile does not exist')
+
+    archdir = os.path.realpath(s_of_r.dir_to_archive_files if s_of_r.dir_to_archive_files else args.archdir)
+    if not os.path.exists(os.path.realpath(archdir)):
+        try:
+            os.mkdir(archdir)
+        except:
+            raise ValueError("archive dir : " + archdir + " cannot find or create dir")
+
     basename = args.Invariant
-    print(basename)
-    #write_defaultconfig()
-    s_of_r = read_config(setOfRules='My_RULES')  # Ok
-    flist = generate_test_list(basename, nbdays=500,dayh=[2,10,13, 16])
-    test_create_file_list(flist, './test_dir')
-    flist_from_dir = get_file_list()
+    print("args namespace=", args)
+    print('working dir=', wrkdir, "\narchive dir=", archdir)
+    print('basename=', basename)
+    # flist = generate_test_list(basename, nbdays=1000,dayh=[2,10,13, 16])
+    # test_create_file_list(flist, wrkdir)
+    flist_from_dir = get_file_list(wrkdir)
     # printlist(flist_from_dir, enum=True)
     flist_basename = [e for e in flist_from_dir if not (re.search(basename, e)==None)]
     # printlist(flist_basename)
@@ -653,9 +666,51 @@ def main(arguments):
     olist = sorted(olist, key=lambda tuplefn: tuplefn.uid, reverse=True)
     # printlist(olist, enum=True)
     compute_start_end_dates(s_of_r, olist[0].objfn)
-    set_2keep_2del(olist, s_of_r)
+    uids2keep = set_2keep_2del(olist, s_of_r)
+    printlist(uids2keep, True)
+    logging.info("keeped list of {0} file(s) : {1}".format( len(uids2keep), ', '.join([str(uid) for uid in uids2keep])))
+    # doing last job
+    # uids2keep = [o.uid for o in keeped]
+    failed = done = []
+    for fileobj in olist:
+        if fileobj.uid not in uids2keep:
+            _filename = os.path.join(wrkdir, fileobj.objfn.filename)
+            if s_of_r.delete_files:
+                try:
+                    os.remove(_filename)
+                except PermissionError:
+                    failed.append(fileobj)
+                    raise ErrorValue("permission denied")
+                else:
+                    done.append(_filename)
+            elif s_of_r.dir_to_archive_files:
+                # if
+                try:
+                    shutil.move(os.path.join(os.getcwd(),_filename),
+                              os.path.join(os.getcwd(),
+                                           s_of_r.dir_to_archive_files,
+                                           _filename)
+                             )
+                except PermissionError:
+                    failed.append(_filename)
+                    return "permission denied"
+                else:
+                    done.append(_filename)
+
+
+    print("="*10 + "DONE" + "="*10)
+    printlist(done)
+    if len(failed) > 0:
+        logging.warning(failed)
+        print("="*10 + "failed" + "="*10)
+        printlist(failed)
+
+
+
 
 
 if __name__ == '__main__':
-    sys.exit(main(sys.argv[1:]))
+
+    # sys.exit(main(sys.argv[1:]))
+    sys.exit(main("E12_LABSED2019-02-prod ./test_dir -l log.log -r ./check_bckp_file.conf".split(" ")))
 

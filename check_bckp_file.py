@@ -193,22 +193,25 @@ flist =  [
 ]
 
 
+def verbose(what, aslist=False, log=False):
+    if not log:
+        if aslist and isinstance(what, (list, tuple)):
+            printlist(what, enum=True)
+        else:
+            print(what)
+    else:
+        pass
+
 
 class obj_fname(object):
     def __init__(self, fname=False, basename=False):
         self.filename = fname
-        self.datetime = datetime(2000,1,1,0,0,0)
-        self.date = date(2000,1,1)
-        # self.date_str = False
-        # self.time_str = False
-        self.hour = time(0,0,0)
-        self.y, self.m, self.d = 0,0,0
-        self.h, self.mm, self.s = 0,0,0
+        self.datetime = datetime(2000, 1, 1, 0, 0, 0)
+        self.date = date(2000, 1, 1)
+        self.time = time(0, 0, 0)
+        self.y, self.m, self.d = 0, 0, 0
+        self.h, self.mm, self.s = 0, 0, 0
         self.dbname = basename
-        # self.dayly_keep = False
-        # self.weekly_keep = False
-        # self.monthly_keep = False
-        # self.yearly_keep = False
         self.uid = False
         if fname and basename:
             self.set_extract_values(fname, basename)
@@ -278,12 +281,6 @@ class rule(object):
             return self.end_date
 
 class set_of_rules(object):
-    day_define = False
-    week_define = False
-    month_define = False
-    each_ended_month = True
-    each_ended_year = True
-    year_define = False
     align_calendar = True
     delete_files = False
     dir_to_archive_files = False
@@ -389,6 +386,14 @@ policy = last
     return parser
 
 def read_config(filename='check_bckp_file.conf', setOfRules='Rules'):
+    def get_val_typed(section, option):
+        try:
+            to_check = eval(config.get(section, option))
+        except:
+            return config.get(section, option)
+        else:
+            return to_check
+
     config = configparser.ConfigParser()
     config.read(filename)
     s_of_r = set_of_rules(setOfRules)
@@ -396,13 +401,13 @@ def read_config(filename='check_bckp_file.conf', setOfRules='Rules'):
     for section in config.sections():
         if section == 'params':
             for option in config[section]:
-                setattr(s_of_r, option, config.get(section, option))
+                setattr(s_of_r, option, get_val_typed(section, option))
                 print(option + ':', s_of_r.__getattribute__(option))
         else:
             s_of_r.add_rule(_name=section, _type=s_of_r.period_name[section])
             cur_rule = s_of_r.get_rule(_name=section, _type=s_of_r.period_name[section])
             for option in config[section]:
-                setattr(cur_rule, option, config.get(section, option))
+                setattr(cur_rule, option, get_val_typed(section, option))
                 print('rule:', cur_rule.name, 'option:', option + ':', cur_rule.__getattribute__(option))
 
     # print('defined rules:', s_of_r.setname, '\n day :', s_of_r.day_define, \
@@ -625,7 +630,7 @@ def main(arguments):
     parser = argparse.ArgumentParser(
         description="Apply some rules (default or stored) to manage rolling backup file on days,weeks,monthes ans years",
         formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('Invariant', help="Name of the file bakuped inside all current bachup file's name")
+    parser.add_argument('Invariant', help="Name of the file backuped inside all current backup file's name")
     parser.add_argument('Bckpfiles_path', help="Path to directory containing the files bakuped")
     parser.add_argument('-r', '--rulesFile', help="Name of the file containing rules", type=argparse.FileType('r'))
     parser.add_argument('-d', '--defaultrules', help="Display default rules")
@@ -636,8 +641,8 @@ def main(arguments):
     if os.path.exists(os.path.realpath(args.Bckpfiles_path)):
         wrkdir = os.path.realpath(args.Bckpfiles_path)
     else:
-       write_defaultconfig()
-       raise ValueError(args.Bckpfiles_path + " does'nt exist.\nDefault example config file have been written")
+        write_defaultconfig()
+        raise ValueError(args.Bckpfiles_path + " does'nt exist.\nDefault example config file have been written")
 
     if args.rulesFile != None and os.path.exists(os.path.realpath(args.rulesFile.name)):
         s_of_r = read_config(os.path.realpath(args.rulesFile.name), setOfRules='MyRules')
@@ -655,8 +660,8 @@ def main(arguments):
     print("args namespace=", args)
     print('working dir=', wrkdir, "\narchive dir=", archdir)
     print('basename=', basename)
-    # flist = generate_test_list(basename, nbdays=1000,dayh=[2,10,13, 16])
-    # test_create_file_list(flist, wrkdir)
+    flist = generate_test_list(basename, nbdays=1000,dayh=[2,10,13, 16])
+    test_create_file_list(flist, wrkdir)
     flist_from_dir = get_file_list(wrkdir)
     # printlist(flist_from_dir, enum=True)
     flist_basename = [e for e in flist_from_dir if not (re.search(basename, e)==None)]
@@ -689,7 +694,8 @@ def main(arguments):
                     shutil.move(os.path.join(os.getcwd(),_filename),
                               os.path.join(os.getcwd(),
                                            s_of_r.dir_to_archive_files,
-                                           _filename)
+                                           os.path.basename(_filename)
+                                           )
                              )
                 except PermissionError:
                     failed.append(_filename)

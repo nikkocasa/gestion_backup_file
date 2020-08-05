@@ -242,7 +242,7 @@ class rule(object):
         self.keep_iso = self.set_number(_number)
         self.keep_min = self.set_number(_number)
         self.keep_max = self.set_number(_number)
-        self.policy = self.set_params(_params)
+        self.policy = self.set_params(_params) if _params else 'all'
         self.start_date = False
         self.end_date = False
         self.first_list = []
@@ -263,8 +263,10 @@ class rule(object):
             return num
 
     def set_params(self, params):
-        if params and params not in ['last', 'first', 'first_last', 'all']:
-            raise ValueError("erreur de params \n must be in : ['last', 'first', 'first_last', 'all']")
+        # if params and params not in ['last', 'first', 'first_last', 'all']:
+        if params not in ['last', 'first', 'first_last', 'all']:
+            raise ValueError("erreur de params \n 'policy' param must be in : ['last', 'first', 'first_last', "
+                             "'all'] in Rule: " + self.name)
         else:
             return params
 
@@ -279,6 +281,9 @@ class rule(object):
             return obj_fname.get_uid_from_datetime(self.end_date)
         else:
             return self.end_date
+
+    def get_policy(self):
+        return self.policy if self.policy is not None else 'last'
 
 class set_of_rules(object):
     align_calendar = True
@@ -424,16 +429,17 @@ def write_defaultconfig(filename='check_bckp_file.conf'):
 
 
 def compute_start_end_dates(sor: set_of_rules, first_objfn: obj_fname):
+    """ Compute first more prox date and last far date from begining"""
     isocal = {'curyear': 0, 'weeknum': 1, 'weekday': 2}
     if sor.start_yesterday:
         td = datetime.today()
-        start_date = datetime(td.year, td.month, td.day - 1, 23,59,59)
+        _StartDate = datetime(td.year, td.month, td.day - 1, 23,59,59)
     else:
-        start_date = first_objfn.datetime
-    cur_start_date = cur_end_date = start_date
+        _StartDate = first_objfn.datetime
+    cur_start_date = cur_end_date = _StartDate
     _minus_One = timedelta(days=1)
 
-    print("--------calcul des dates des regles------------")
+    print("--------calcul des dates et des regles------------")
 
     sor_list = sor.get_list_of_rules()
     for cur_rule in sor_list:
@@ -484,11 +490,11 @@ def compute_start_end_dates(sor: set_of_rules, first_objfn: obj_fname):
 
         elif cur_rule.type == 'month':
             if sor.each_ended_month:
-                # this option assume that start_date is the last day of previous month
+                # this option assume that _StartDate is the last day of previous month
                 # even if weeks keeping go more further than this date
-                # note the use of 'start_date' instead of 'cur_start_date'
+                # note the use of '_StartDate' instead of 'cur_start_date'
                 td = relativedelta(day=1) + relativedelta(days=1)
-                cur_start_date = start_date - td  # go to the last day of previous month
+                cur_start_date = _StartDate - td  # go to the last day of previous month
             td = relativedelta(months=int(cur_rule.keep), day=1)
             cur_end_date -= td
 
@@ -505,17 +511,17 @@ def compute_start_end_dates(sor: set_of_rules, first_objfn: obj_fname):
 
         elif cur_rule.type == 'year':
             if sor.each_ended_year:
-                # this option assume that start_date is the last day of previous month
+                # this option assume that _StartDate is the last day of previous month
                 # even if weeks keeping go more further than this date
-                # note the use of 'start_date' instead of 'cur_start_date'
+                # note the use of '_StartDate' instead of 'cur_start_date'
                 td = relativedelta(month=1, day=1) + relativedelta(days=1)
-                cur_start_date = start_date - td  # go to the last day of previous year
+                cur_start_date = _StartDate - td  # go to the last day of previous year
             td = relativedelta(years=int(cur_rule.keep), day=1)
             cur_end_date -= td
 
             cur_rule.last_list = []
             for i in range(0,int(cur_rule.keep_iso)):
-                dt = relativedelta(year=i, day=635)
+                dt = relativedelta(years=i)
                 cur_rule.last_list.append((cur_start_date - dt).replace(hour=23, minute=59, second=59))
                 print('last years: \t', cur_rule.last_list[-1])
             cur_rule.first_list = []
@@ -531,7 +537,8 @@ def compute_start_end_dates(sor: set_of_rules, first_objfn: obj_fname):
                                                                                  cur_rule.keep,
                                                                                  cur_rule.start_date,
                                                                                  cur_rule.end_date,
-                                                                                 cur_rule.policy))
+                                                                                 cur_rule.get_policy())
+              )
         print('=' * 100)
         cur_end_date -= _minus_One  # go to day before to start next cur_rule
 
@@ -546,7 +553,8 @@ def test_create_file_list(flist, path=False):
     for filename in flist:
         corpus = 'This is a file test for file: ' + filename + '\n'
         with open(os.path.join(path,filename), 'w') as test_file:
-            test_file.write(corpus)
+            if os.fstat(test_file.fileno()).st_size == 0:
+                test_file.write(corpus)
 
 def generate_test_list(nombase, dayh=[0,12], nbdays=500, sd=datetime.today()):
     def strf(l):
@@ -563,45 +571,53 @@ def generate_test_list(nombase, dayh=[0,12], nbdays=500, sd=datetime.today()):
     return flist
 
 def set_2keep_2del(olist, setofrule):
+    """"prendre un jeu de regeles l'une après l'autre,
+    pour :  - traiter la règle journalière, puis semaine, mois, etc"""
+
     def is_date_in(d, l):
         return d in [d.date() for d in l]
-    keeped = []
+
     s_o_r = setofrule.get_list_of_rules()
+    res_dict = {}
+
     for rule in s_o_r:
+        if rule.type not in res_dict.keys():
+            res_dict[rule.type] = []
         cur_startdate, cur_enddate = rule.get_startdate(uid_format=False), rule.get_enddate(uid_format=False)
-        date_list = rule.first_list if rule.policy == 'first' else rule.last_list
-        date_list += rule.first_list if rule.policy == 'first_last' else []
-        # creating a dict keys on eache dates, values list of file found at that date
-        cur_list = {k.date():[] for k in date_list} if rule.policy != 'all' else {'all':[]}
-        for o in olist: # then feeding the dict
-            # take care that end date is smaller than start date
-            if o.objfn.datetime <= cur_startdate and o.objfn.datetime >= cur_enddate:
-                #calculate option paramters
-                if rule.policy == 'all':
-                    cur_list['all'].append(o.objfn)
-                elif rule.policy == 'first':
-                    if is_date_in(o.objfn.date, rule.first_list):
-                        cur_list[o.objfn.date].append(o.objfn)
-                elif rule.policy == 'last':
-                    if is_date_in(o.objfn.date, rule.last_list):
-                        cur_list[o.objfn.date].append(o.objfn)
-                elif rule.policy == 'first_last':
-                    if is_date_in(o.objfn.date, rule.first_list) or\
-                            is_date_in(o.objfn.date, rule.last_list):
-                        cur_list[o.objfn.date].append(o.objfn)
+        # setting the right list of date to use, regarding rule's policy
+        if rule.get_policy() == 'first':
+            date_list = rule.last_list
+        elif rule.get_policy() == 'last':
+            date_list = rule.last_list
+        elif rule.get_policy() == 'first_last':
+            date_list = rule.first_list + rule.last_list
+        else:  # mean 'all'
+            date_list = []
+
+        # creating a dict of keys on each date, values list of file found at that date
+        # cur_list = {k.date():[] for k in date_list} if rule.get_policy() != 'all' else {'all':[]}
+
+        if rule.get_policy() == 'all':
+            cur_obj_list = [o.objfn for o in olist]
+        else:  # Filtering full list of file from date in current rule
+            cur_obj_list = [o.objfn for o in olist if o.objfn.datetime in date_list]
+        _all = rule.get_policy() == 'all'  # set outside the loop for accessing once only
+        cur_obj_list = [o.objfn for o in olist if (o.objfn.datetime in date_list) \
+                        and (cur_startdate >= o.objfn.datetime >= cur_enddate) or _all]
+
         # then, as the list by dates is done, keeping only files in accordance with policy rule
-        for key, dl in cur_list.items():
+        for key, dl in cur_obj_list.items():
             # sorting list for current date newer (last) in first place
             dl.sort(key=lambda o: o.datetime, reverse=True)
             #apply final cut
             cur_obj = False
             if len(dl) == 0:
                 continue
-            elif rule.policy == 'first':
+            elif rule.get_policy() == 'first':
                 cur_obj = dl[-1]  # keeping older
-            elif rule.policy == 'last':
+            elif rule.get_policy() == 'last':
                 cur_obj = dl[0]  # keeping newer
-            elif rule.policy == 'first_last':
+            elif rule.get_policy() == 'first_last':
                 cur_obj = [dl[-1], dl[-1]]  # keeping both
             if cur_obj:
                 cur_list[key] = cur_obj
@@ -612,6 +628,62 @@ def set_2keep_2del(olist, setofrule):
     # tobj = collections.namedtuple('tupleobj','uid objfn')
     # return [tobj(int(o.uid), o) for o in list(flatten(keeped))]
     return [int(o.uid) for o in list(flatten(keeped))]
+
+
+
+
+# def set_2keep_2del(olist, setofrule):
+#     def is_date_in(d, l):
+#         return d in [d.date() for d in l]
+#     keeped = []
+#     s_o_r = setofrule.get_list_of_rules()
+#     for rule in s_o_r:
+#         cur_startdate, cur_enddate = rule.get_startdate(uid_format=False), rule.get_enddate(uid_format=False)
+#         pol = rule.policy
+#         pol = rule.get_policy()
+#         date_list = rule.first_list if rule.get_policy() == 'first' else rule.last_list
+#         date_list += rule.first_list if rule.get_policy() == 'first_last' else []
+#         # creating a dict keys on eache dates, values list of file found at that date
+#         cur_list = {k.date():[] for k in date_list} if rule.get_policy() != 'all' else {'all':[]}
+#         for o in olist: # then feeding the dict
+#             # take care that end date is smaller than start date
+#             if cur_startdate >= o.objfn.datetime >= cur_enddate:
+#                 #calculate option paramters
+#                 if rule.get_policy() == 'all':
+#                     cur_list['all'].append(o.objfn)
+#                 elif rule.get_policy() == 'first':
+#                     if is_date_in(o.objfn.date, rule.first_list):
+#                         cur_list[o.objfn.date].append(o.objfn)
+#                 elif rule.get_policy() == 'last':
+#                     if is_date_in(o.objfn.date, rule.last_list):
+#                         cur_list[o.objfn.date].append(o.objfn)
+#                 elif rule.get_policy() == 'first_last':
+#                     if is_date_in(o.objfn.date, rule.first_list) or\
+#                             is_date_in(o.objfn.date, rule.last_list):
+#                         cur_list[o.objfn.date].append(o.objfn)
+#         # then, as the list by dates is done, keeping only files in accordance with policy rule
+#         for key, dl in cur_list.items():
+#             # sorting list for current date newer (last) in first place
+#             dl.sort(key=lambda o: o.datetime, reverse=True)
+#             #apply final cut
+#             cur_obj = False
+#             if len(dl) == 0:
+#                 continue
+#             elif rule.get_policy() == 'first':
+#                 cur_obj = dl[-1]  # keeping older
+#             elif rule.get_policy() == 'last':
+#                 cur_obj = dl[0]  # keeping newer
+#             elif rule.get_policy() == 'first_last':
+#                 cur_obj = [dl[-1], dl[-1]]  # keeping both
+#             if cur_obj:
+#                 cur_list[key] = cur_obj
+#
+#         # to_keep[rule.type] = [fn for fn in [el for el in cur_list.values()]]
+#         ll = list(flatten(cur_list.values()))
+#         keeped.append(ll)
+#     # tobj = collections.namedtuple('tupleobj','uid objfn')
+#     # return [tobj(int(o.uid), o) for o in list(flatten(keeped))]
+#     return [int(o.uid) for o in list(flatten(keeped))]
 
 def flatten(items):
     """Yield items from any nested iterable; see Reference."""
@@ -645,11 +717,11 @@ def main(arguments):
         raise ValueError(args.Bckpfiles_path + " does'nt exist.\nDefault example config file have been written")
 
     if args.rulesFile != None and os.path.exists(os.path.realpath(args.rulesFile.name)):
-        s_of_r = read_config(os.path.realpath(args.rulesFile.name), setOfRules='MyRules')
+        SetOfRules = read_config(os.path.realpath(args.rulesFile.name), setOfRules='MyRules')
     else:
         raise ValueError(' option -r or RuleFile does not exist')
 
-    archdir = os.path.realpath(s_of_r.dir_to_archive_files if s_of_r.dir_to_archive_files else args.archdir)
+    archdir = os.path.realpath(SetOfRules.dir_to_archive_files if SetOfRules.dir_to_archive_files else args.archdir)
     if not os.path.exists(os.path.realpath(archdir)):
         try:
             os.mkdir(archdir)
@@ -667,11 +739,12 @@ def main(arguments):
     flist_basename = [e for e in flist_from_dir if not (re.search(basename, e)==None)]
     # printlist(flist_basename)
     tobj = collections.namedtuple('tupleobj','uid objfn')
+    # then making a sorted list of tuple (uid, ojb) to be manipulated easily
     olist = [tobj(int(o.uid), o) for o in [obj_fname(fn, basename) for fn in flist_basename]]
     olist = sorted(olist, key=lambda tuplefn: tuplefn.uid, reverse=True)
     # printlist(olist, enum=True)
-    compute_start_end_dates(s_of_r, olist[0].objfn)
-    uids2keep = set_2keep_2del(olist, s_of_r)
+    compute_start_end_dates(SetOfRules, olist[0].objfn)
+    uids2keep = set_2keep_2del(olist, SetOfRules)
     printlist(uids2keep, True)
     logging.info("keeped list of {0} file(s) : {1}".format( len(uids2keep), ', '.join([str(uid) for uid in uids2keep])))
     # doing last job
@@ -680,7 +753,7 @@ def main(arguments):
     for fileobj in olist:
         if fileobj.uid not in uids2keep:
             _filename = os.path.join(wrkdir, fileobj.objfn.filename)
-            if s_of_r.delete_files:
+            if SetOfRules.delete_files:
                 try:
                     os.remove(_filename)
                 except PermissionError:
@@ -688,12 +761,12 @@ def main(arguments):
                     raise ErrorValue("permission denied")
                 else:
                     done.append(_filename)
-            elif s_of_r.dir_to_archive_files:
+            elif SetOfRules.dir_to_archive_files:
                 # if
                 try:
                     shutil.move(os.path.join(os.getcwd(),_filename),
                               os.path.join(os.getcwd(),
-                                           s_of_r.dir_to_archive_files,
+                                           SetOfRules.dir_to_archive_files,
                                            os.path.basename(_filename)
                                            )
                              )
@@ -704,7 +777,7 @@ def main(arguments):
                     done.append(_filename)
 
 
-    print("="*10 + "DONE" + "="*10)
+    print("="*10 + " Job finished " + "="*10)
     printlist(done)
     if len(failed) > 0:
         logging.warning(failed)
@@ -718,5 +791,5 @@ def main(arguments):
 if __name__ == '__main__':
 
     # sys.exit(main(sys.argv[1:]))
-    sys.exit(main("E12_LABSED2019-02-prod ./test_dir -l log.log -r ./check_bckp_file.conf".split(" ")))
+    sys.exit(main("E12_LABSED2019-04-prod ./test_dir -l log.log -r ./check_bckp_file.conf".split(" ")))
 

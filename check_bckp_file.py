@@ -756,6 +756,9 @@ def main(args):
             print_report_header("failed")
             printlist(failed)
 
+##########################################
+### main implementation - todo: logging ##
+##########################################
 
 parser = argparse.ArgumentParser(
     description="Apply some rules (default or stored) to manage rolling backup file on days,weeks,monthes ans years",

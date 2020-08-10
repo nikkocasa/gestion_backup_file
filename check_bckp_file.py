@@ -194,14 +194,11 @@ flist = [
 ]
 
 
-def verbose(what, aslist=False, log=False):
-    if not log:
-        if aslist and isinstance(what, (list, tuple)):
-            printlist(what, enum=True)
-        else:
-            print(what)
+def verbose(*what):
+    if args.logfile:
+        print(*what)
     else:
-        pass
+        print('Log:', *what)
 
 
 class obj_fname(object):
@@ -319,7 +316,7 @@ class set_of_rules(object):
         elif self.check_args(type=_type):
             _rule = _rule if _rule != None else rule(_name, _type)
             self.dictOfRules[_rule.type] = {_rule.name: _rule}
-            print(self.dictOfRules)
+            verbose(self.dictOfRules)
 
     def get_rule(self, _type, _name):
         if self.check_args(type=_type, name=_name):
@@ -353,10 +350,10 @@ def printlist(l, enum=False):
     if enum:
         numformat = '{:0' + str(len(str(len(l)))) + 'd}'
         for i, e in enumerate(l):
-            print(numformat.format(i), e)
+            verbose(numformat.format(i), e)
     else:
         for e in l:
-            print(e)
+            verbose(e)
 
 
 def get_default_conf():
@@ -411,15 +408,15 @@ def read_config(filename='check_bckp_file.conf', setOfRules='Rules'):
         if section == 'params':
             for option in config[section]:
                 setattr(s_of_r, option, get_val_typed(section, option))
-                print(option + ':', s_of_r.__getattribute__(option))
+                verbose(option + ':', s_of_r.__getattribute__(option))
         else:
             s_of_r.add_rule(_name=section, _type=s_of_r.period_name[section])
             cur_rule = s_of_r.get_rule(_name=section, _type=s_of_r.period_name[section])
             for option in config[section]:
                 setattr(cur_rule, option, get_val_typed(section, option))
-                print('rule:', cur_rule.name, 'option:', option + ':', cur_rule.__getattribute__(option))
+                verbose('rule:', cur_rule.name, 'option:', option + ':', cur_rule.__getattribute__(option))
 
-    # print('defined rules:', s_of_r.setname, '\n day :', s_of_r.day_define, \
+    # verbose('defined rules:', s_of_r.setname, '\n day :', s_of_r.day_define, \
     #                         '\n week :', s_of_r.week_define, \
     #                         '\n month :', s_of_r.month_define, \
     #                         '\n year :', s_of_r.year_define)
@@ -443,7 +440,7 @@ def compute_start_end_dates(sor: set_of_rules, first_objfn: obj_fname):
     cur_start_date = cur_end_date = _StartDate
     _minus_One = timedelta(days=1)
 
-    print("--------calcul des dates et des regles------------")
+    print_report_header("--------calcul des dates et des regles------------")
 
     sor_list = sor.get_list_of_rules()
     for cur_rule in sor_list:
@@ -463,12 +460,12 @@ def compute_start_end_dates(sor: set_of_rules, first_objfn: obj_fname):
             for i in range(0, int(cur_rule.keep_iso)):
                 dt = timedelta(days=i)
                 cur_rule.last_list.append((cur_start_date - dt).replace(hour=23, minute=59, second=59))
-                print('last_days: \t', cur_rule.last_list[-1])
+                verbose('last_days: \t', cur_rule.last_list[-1])
             cur_rule.first_list = []
             for i in range(0, int(cur_rule.keep_iso)):
                 dt = timedelta(days=i + 1)
                 cur_rule.first_list.append((cur_end_date + dt).replace(hour=0, minute=0, second=0))
-                print('first_days: \t', cur_rule.first_list[-1])
+                verbose('first_days: \t', cur_rule.first_list[-1])
 
         elif cur_rule.type == 'week':
             td = timedelta(weeks=int(cur_rule.keep))
@@ -485,12 +482,12 @@ def compute_start_end_dates(sor: set_of_rules, first_objfn: obj_fname):
             for i in range(0, int(cur_rule.keep_iso)):
                 dt = timedelta(days=i * 7)
                 cur_rule.last_list.append((cur_start_date - dt).replace(hour=23, minute=59, second=59))
-                print('last_weeks: \t', cur_rule.last_list[-1])
+                verbose('last_weeks: \t', cur_rule.last_list[-1])
             cur_rule.first_list = []
             for i in range(0, int(cur_rule.keep_iso)):
                 dt = timedelta(days=i * 7)
                 cur_rule.first_list.append((cur_end_date + dt).replace(hour=0, minute=0, second=0))
-                print('first_weeks: \t', cur_rule.first_list[-1])
+                verbose('first_weeks: \t', cur_rule.first_list[-1])
 
         elif cur_rule.type == 'month':
             if sor.each_ended_month:
@@ -506,12 +503,12 @@ def compute_start_end_dates(sor: set_of_rules, first_objfn: obj_fname):
             for i in range(0, int(cur_rule.keep_iso)):
                 dt = relativedelta(months=i - 1, day=1) + relativedelta(days=1)
                 cur_rule.last_list.append((cur_start_date - dt).replace(hour=23, minute=59, second=59))
-                print('last monthes: \t', cur_rule.last_list[-1])
+                verbose('last monthes: \t', cur_rule.last_list[-1])
             cur_rule.first_list = []
             for i in range(0, int(cur_rule.keep_iso)):
                 dt = relativedelta(months=i + 1, day=1)
                 cur_rule.first_list.append((cur_end_date + dt).replace(hour=0, minute=0, second=0))
-                print('first_monthes: \t', cur_rule.first_list[-1])
+                verbose('first_monthes: \t', cur_rule.first_list[-1])
 
         elif cur_rule.type == 'year':
             if sor.each_ended_year:
@@ -527,23 +524,23 @@ def compute_start_end_dates(sor: set_of_rules, first_objfn: obj_fname):
             for i in range(0, int(cur_rule.keep_iso)):
                 dt = relativedelta(years=i)
                 cur_rule.last_list.append((cur_start_date - dt).replace(hour=23, minute=59, second=59))
-                print('last years: \t', cur_rule.last_list[-1])
+                verbose('last years: \t', cur_rule.last_list[-1])
             cur_rule.first_list = []
             for i in range(0, int(cur_rule.keep_iso)):
                 dt = relativedelta(year=i, month=1, day=1)
                 cur_rule.first_list.append((cur_end_date + dt).replace(hour=0, minute=0, second=0))
-                print('first years: \t', cur_rule.first_list[-1])
+                verbose('first years: \t', cur_rule.first_list[-1])
 
         cur_rule.start_date, cur_rule.end_date = cur_start_date, cur_end_date
 
-        print('-' * 100)
-        print('Type={0} \t keep={1} \t debut={2} \t fin={3} \t (Policy={4})'.format(cur_rule.type,
+        verbose('-' * 100)
+        verbose('Type={0} \t keep={1} \t debut={2} \t fin={3} \t (Policy={4})'.format(cur_rule.type,
                                                                                     cur_rule.keep,
                                                                                     cur_rule.start_date,
                                                                                     cur_rule.end_date,
                                                                                     cur_rule.get_policy())
               )
-        print('=' * 100)
+        verbose('=' * 100)
         cur_end_date -= _minus_One  # go to day before to start next cur_rule
 
 
@@ -664,28 +661,15 @@ def flatten(items):
 
 
 def print_report_header(message, length=40):
-    print('*' * length)
-    print(message)
-    print('*' * length)
+    verbose('*' * length)
+    verbose(message)
+    verbose('*' * length)
 
 
-def main(arguments):
-    parser = argparse.ArgumentParser(
-        description="Apply some rules (default or stored) to manage rolling backup file on days,weeks,monthes ans years",
-        formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('-n', '--invariant', help="Name of the file backuped inside all current backup file's name", nargs=1)
-    parser.add_argument('-b', '--files_path', help="Path to directory containing the files backuped", nargs=1)
-    parser.add_argument('-r', '--config_rules', help="Name of the file containing rules", type=argparse.FileType('r'), nargs=1)
-    parser.add_argument('-d', '--defaultrules', help="Display default rules", action='store_true')
-    parser.add_argument('-t', '--testrules', help="Dry run : test rules ans display result on console", action='store_true')
-    parser.add_argument('-a', '--archdir', help="set archive path for non deletion option", nargs=1, default='./archived')
-    parser.add_argument('-l', '--logfile', help="log file",
-                        default=sys.stdout, type=argparse.FileType('w'), nargs=1)
-    args = parser.parse_args(arguments)
-    args.config_rules = args.config_rules[0]
-    args.files_path = args.files_path[0]
-    args.invariant = args.invariant[0]
-    args.logfile = args.logfile[0]
+
+
+
+def main(args):
 
     if os.path.isdir(os.path.realpath(args.files_path)):
         wrkdir = os.path.realpath(args.files_path)
@@ -706,14 +690,14 @@ def main(arguments):
             raise ValueError("archive dir : " + archdir + " cannot find or create dir")
 
     basename = args.invariant
-    print("args namespace=", args)
-    print('working dir=', wrkdir, "\narchive dir=", archdir)
-    print('basename=', basename)
+    verbose("args namespace=", args)
+    verbose('working dir=', wrkdir, "\narchive dir=", archdir)
+    verbose('basename=', basename)
     # flist = generate_test_list(basename, nbdays=1000, dayh=[2, 10, 13, 16])
     # test_create_file_list(flist, wrkdir)
     flist_from_dir = get_file_list(wrkdir)
     if len(flist_from_dir) == 0:
-        print(wrkdir+ " is empty Nothing to do !")
+        verbose(wrkdir+ " is empty Nothing to do !")
         exit(0)
     # printlist(flist_from_dir, enum=True)
     flist_basename = [e for e in flist_from_dir if not (re.search(basename, e) == None)]
@@ -773,7 +757,32 @@ def main(arguments):
             printlist(failed)
 
 
+parser = argparse.ArgumentParser(
+    description="Apply some rules (default or stored) to manage rolling backup file on days,weeks,monthes ans years",
+    formatter_class=argparse.RawDescriptionHelpFormatter)
+parser.add_argument('-n', '--invariant', help="Name of the file backuped inside all current backup file's name",
+                    nargs=1)
+parser.add_argument('-b', '--files_path', help="Path to directory containing the files backuped", nargs=1)
+parser.add_argument('-r', '--config_rules', help="Name of the file containing rules", type=argparse.FileType('r'),
+                    nargs=1)
+parser.add_argument('-d', '--defaultrules', help="Display default rules", action='store_true')
+parser.add_argument('-v', '--verbose', help="Display default rules", action='store_true')
+parser.add_argument('-t', '--testrules', help="Dry run : test rules ans display result on console",
+                    action='store_true')
+parser.add_argument('-a', '--archdir', help="set archive path for non deletion option", nargs=1,
+                    default='./archived')
+parser.add_argument('-l', '--logfile', help="log file",
+                    default=sys.stdout, type=argparse.FileType('w'), nargs=1)
+
 if __name__ == '__main__':
-    sys.exit(main("-t -r ./check_bckp_file.conf -l log.log -n E12_LABSED2019-04-prod.zip -b ./test_dir".split(" ")))
+    args = parser.parse_args(
+        "-r ./check_bckp_file.conf -l logtest.log -n E12_LABSED2019-04-prod.zip -b ./test_dir".split(" "))
 else:
-    sys.exit(main(sys.argv[1:]))
+    args = parser.parse_args(sys.argv[1:])
+
+args.config_rules = args.config_rules[0]
+args.files_path = args.files_path[0]
+args.invariant = args.invariant[0]
+args.logfile = args.logfile[0]
+
+sys.exit(main(args))

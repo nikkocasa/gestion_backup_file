@@ -682,16 +682,17 @@ def main(args):
     else:
         raise ValueError('config_Rules File does not exist')
 
-    archdir = os.path.realpath(SetOfRules.dir_to_archive_files if SetOfRules.dir_to_archive_files else args.archdir)
-    if not os.path.exists(os.path.realpath(archdir)):
+    SetOfRules.dir_to_archive_files = args.archdir = os.path.realpath(args.archdir if args.archdir else SetOfRules.dir_to_archive_files)
+
+    if not os.path.exists(args.archdir):
         try:
-            os.mkdir(archdir)
+            os.mkdir(args.archdir)
         except:
-            raise ValueError("archive dir : " + archdir + " cannot find or create dir")
+            raise ValueError("archive dir : " + args.archdir + " cannot be found or created")
 
     basename = args.invariant
     verbose("args namespace=", args)
-    verbose('working dir=', wrkdir, "\narchive dir=", archdir)
+    verbose('working dir=', wrkdir, "\narchive dir=", args.archdir)
     verbose('basename=', basename)
     # flist = generate_test_list(basename, nbdays=1000, dayh=[2, 10, 13, 16])
     # test_create_file_list(flist, wrkdir)
@@ -779,13 +780,14 @@ parser.add_argument('-l', '--logfile', help="log file",
 
 if __name__ == '__main__':
     args = parser.parse_args(
-        "-r ./check_bckp_file.conf -l logtest.log -n E12_LABSED2019-04-prod.zip -b ./test_dir".split(" "))
+        "-r ./check_bckp_file.conf -l logtest.log -a ./archtest -n E12_LABSED2019-04-prod.zip -b ./test_dir".split(" "))
 else:
     args = parser.parse_args(sys.argv[1:])
 
 args.config_rules = args.config_rules[0]
 args.files_path = args.files_path[0]
 args.invariant = args.invariant[0]
+args.archdir = args.archdir[0]
 args.logfile = args.logfile[0]
 
 sys.exit(main(args))

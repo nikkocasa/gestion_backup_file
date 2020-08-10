@@ -673,27 +673,30 @@ def main(arguments):
     parser = argparse.ArgumentParser(
         description="Apply some rules (default or stored) to manage rolling backup file on days,weeks,monthes ans years",
         formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('Invariant', help="Name of the file backuped inside all current backup file's name")
-    parser.add_argument('Bckpfiles_path', help="Path to directory containing the files backuped")
-    parser.add_argument('-r', '--config_rules', help="Name of the file containing rules", type=argparse.FileType('r'))
-    parser.add_argument('-d', '--defaultrules', help="Display default rules")
-    parser.add_argument('-t', '--testrules', help="Dry run : test rules ans display result on console")
-    parser.add_argument('-a', '--archdir', help="set archive path for non deletion option", default='./archived')
+    parser.add_argument('-n', '--invariant', help="Name of the file backuped inside all current backup file's name", nargs=1)
+    parser.add_argument('-b', '--files_path', help="Path to directory containing the files backuped", nargs=1)
+    parser.add_argument('-r', '--config_rules', help="Name of the file containing rules", type=argparse.FileType('r'), nargs=1)
+    parser.add_argument('-d', '--defaultrules', help="Display default rules", action='store_true')
+    parser.add_argument('-t', '--testrules', help="Dry run : test rules ans display result on console", action='store_true')
+    parser.add_argument('-a', '--archdir', help="set archive path for non deletion option", nargs=1, default='./archived')
     parser.add_argument('-l', '--logfile', help="log file",
-                        default=sys.stdout, type=argparse.FileType('w'))
+                        default=sys.stdout, type=argparse.FileType('w'), nargs=1)
     args = parser.parse_args(arguments)
-    if os.path.exists(os.path.realpath(args.Bckpfiles_path)):
-        wrkdir = os.path.realpath(args.Bckpfiles_path)
+    args.config_rules = args.config_rules[0]
+    args.files_path = args.files_path[0]
+    args.invariant = args.invariant[0]
+    args.logfile = args.logfile[0]
+
+    if os.path.isdir(os.path.realpath(args.files_path)):
+        wrkdir = os.path.realpath(args.files_path)
     else:
         write_defaultconfig()
-        raise ValueError(args.Bckpfiles_path + " does'nt exist.\nDefault example config file have been written")
+        raise ValueError(args.files_path + " does'nt exist.\nDefault example config file have been written")
 
     if args.config_rules != None and os.path.exists(os.path.realpath(args.config_rules.name)):
         SetOfRules = read_config(os.path.realpath(args.config_rules.name), setOfRules='MyRules')
     else:
         raise ValueError('config_Rules File does not exist')
-
-    dry_run = args.testrules != None
 
     archdir = os.path.realpath(SetOfRules.dir_to_archive_files if SetOfRules.dir_to_archive_files else args.archdir)
     if not os.path.exists(os.path.realpath(archdir)):
@@ -702,13 +705,16 @@ def main(arguments):
         except:
             raise ValueError("archive dir : " + archdir + " cannot find or create dir")
 
-    basename = args.Invariant
+    basename = args.invariant
     print("args namespace=", args)
     print('working dir=', wrkdir, "\narchive dir=", archdir)
     print('basename=', basename)
     # flist = generate_test_list(basename, nbdays=1000, dayh=[2, 10, 13, 16])
     # test_create_file_list(flist, wrkdir)
     flist_from_dir = get_file_list(wrkdir)
+    if len(flist_from_dir) == 0:
+        print(wrkdir+ " is empty Nothing to do !")
+        exit(0)
     # printlist(flist_from_dir, enum=True)
     flist_basename = [e for e in flist_from_dir if not (re.search(basename, e) == None)]
     # printlist(flist_basename)
@@ -732,7 +738,7 @@ def main(arguments):
     logging.info("keeped list of {0} file(s) : {1}".format(len(uids2keep), ', '.join([str(uid) for uid in uids2keep])))
 
     # doing last job : moving the files
-    if not dry_run:
+    if not args.testrules:
         failed = done = []
         d_olist = dict(olist)
         for uid in uids2del:
@@ -768,6 +774,6 @@ def main(arguments):
 
 
 if __name__ == '__main__':
-    sys.exit(main("E12_LABSED2019-04-prod.zip ./test_dir -l log.log -r ./check_bckp_file.conf -t".split(" ")))
+    sys.exit(main("-t -r ./check_bckp_file.conf -l log.log -n E12_LABSED2019-04-prod.zip -b ./test_dir".split(" ")))
 else:
     sys.exit(main(sys.argv[1:]))

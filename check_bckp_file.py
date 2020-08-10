@@ -677,6 +677,7 @@ def main(arguments):
     parser.add_argument('Bckpfiles_path', help="Path to directory containing the files backuped")
     parser.add_argument('-r', '--config_rules', help="Name of the file containing rules", type=argparse.FileType('r'))
     parser.add_argument('-d', '--defaultrules', help="Display default rules")
+    parser.add_argument('-t', '--testrules', help="Dry run : test rules ans display result on console")
     parser.add_argument('-a', '--archdir', help="set archive path for non deletion option", default='./archived')
     parser.add_argument('-l', '--logfile', help="log file",
                         default=sys.stdout, type=argparse.FileType('w'))
@@ -691,6 +692,8 @@ def main(arguments):
         SetOfRules = read_config(os.path.realpath(args.config_rules.name), setOfRules='MyRules')
     else:
         raise ValueError('config_Rules File does not exist')
+
+    dry_run = args.testrules != None
 
     archdir = os.path.realpath(SetOfRules.dir_to_archive_files if SetOfRules.dir_to_archive_files else args.archdir)
     if not os.path.exists(os.path.realpath(archdir)):
@@ -729,41 +732,42 @@ def main(arguments):
     logging.info("keeped list of {0} file(s) : {1}".format(len(uids2keep), ', '.join([str(uid) for uid in uids2keep])))
 
     # doing last job : moving the files
-    failed = done = []
-    d_olist = dict(olist)
-    for uid in uids2del:
-        _filename = os.path.join(wrkdir, d_olist[uid].filename)
-        if SetOfRules.delete_files:
-            try:
-                os.remove(_filename)
-            except PermissionError:
-                failed.append(fileobj)
-                raise ErrorValue("permission denied")
-            else:
-                done.append(_filename)
-        elif SetOfRules.dir_to_archive_files:
-            try:
-                shutil.move(os.path.join(os.getcwd(), _filename),
-                            os.path.join(os.getcwd(),
-                                         SetOfRules.dir_to_archive_files,
-                                         os.path.basename(_filename)
-                                         )
-                            )
-            except PermissionError:
-                failed.append(_filename)
-                return "permission denied"
-            else:
-                done.append(_filename)
+    if not dry_run:
+        failed = done = []
+        d_olist = dict(olist)
+        for uid in uids2del:
+            _filename = os.path.join(wrkdir, d_olist[uid].filename)
+            if SetOfRules.delete_files:
+                try:
+                    os.remove(_filename)
+                except PermissionError:
+                    failed.append(fileobj)
+                    raise ErrorValue("permission denied")
+                else:
+                    done.append(_filename)
+            elif SetOfRules.dir_to_archive_files:
+                try:
+                    shutil.move(os.path.join(os.getcwd(), _filename),
+                                os.path.join(os.getcwd(),
+                                             SetOfRules.dir_to_archive_files,
+                                             os.path.basename(_filename)
+                                             )
+                                )
+                except PermissionError:
+                    failed.append(_filename)
+                    return "permission denied"
+                else:
+                    done.append(_filename)
 
-    print_report_header("Job finished ")
-    printlist(done)
-    if len(failed) > 0:
-        logging.warning(failed)
-        print_report_header("failed")
-        printlist(failed)
+        print_report_header("Job finished ")
+        printlist(done)
+        if len(failed) > 0:
+            logging.warning(failed)
+            print_report_header("failed")
+            printlist(failed)
 
 
 if __name__ == '__main__':
-    sys.exit(main("E12_LABSED2019-04-prod.zip ./test_dir -l log.log -r ./check_bckp_file.conf".split(" ")))
+    sys.exit(main("E12_LABSED2019-04-prod.zip ./test_dir -l log.log -r ./check_bckp_file.conf -t".split(" ")))
 else:
     sys.exit(main(sys.argv[1:]))

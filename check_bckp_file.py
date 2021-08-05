@@ -194,10 +194,10 @@ flist = [
 ]
 
 
-def verbose(what, aslist=False, log=False):
+def verbose(what, enum=False, log=False, recur=False):
     if not log:
-        if aslist and isinstance(what, (list, tuple)):
-            printlist(what, enum=True)
+        if enum and isinstance(what, (list, tuple)):
+            printlist(what, enum, recur)
         else:
             print(what)
     else:
@@ -349,15 +349,17 @@ def get_file_list(path=False):
     return os.listdir(path) if path else False
 
 
-def printlist(l, enum=False):
+def printlist(l, enum=False, recur=False):
     if enum:
         numformat = '{:0' + str(len(str(len(l)))) + 'd}'
         for i, e in enumerate(l):
-            print(numformat.format(i), e)
+            if recur > 0 and isinstance(e, (list, tuple)):
+                printlist(e, True, recur + 1)
+            else:
+                print(chr(9) * recur + numformat.format(i), e)
     else:
         for e in l:
             print(e)
-
 
 def get_default_conf():
     parser = configparser.ConfigParser()
@@ -668,8 +670,7 @@ def print_report_header(message, length=40):
     print(message)
     print('*' * length)
 
-
-def main(arguments):
+ def parseargs(args):
     parser = argparse.ArgumentParser(
         description="Apply some rules (default or stored) to manage rolling backup file on days,weeks,monthes ans years",
         formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -677,58 +678,89 @@ def main(arguments):
     parser.add_argument('-b', '--files_path', help="Path to directory containing the files backuped", nargs=1)
     parser.add_argument('-r', '--config_rules', help="Name of the file containing rules", type=argparse.FileType('r'), nargs=1)
     parser.add_argument('-d', '--defaultrules', help="Display default rules", action='store_true')
-    parser.add_argument('-t', '--testrules', help="Dry run : test rules ans display result on console", action='store_true')
+    parser.add_argument('-t', '--dryrun', help="Dry run : test rules and display result on console", action='store_true')
     parser.add_argument('-a', '--archdir', help="set archive path for non deletion option", nargs=1, default='./archived')
     parser.add_argument('-l', '--logfile', help="log file",
                         default=sys.stdout, type=argparse.FileType('w'), nargs=1)
-    args = parser.parse_args(arguments)
+    parser.add_argument('-v', '--verbose', help="log file", action='store_true')
+    parser.add_argument('-s', '--silent', help="do not ask validation for actions", action='store_false')
+    parser.add_argument('--yes', help="Accept all action (not recommended)", action='store_false')
+    args = parser.parse_args(args)
     args.config_rules = args.config_rules[0]
     args.files_path = args.files_path[0]
     args.invariant = args.invariant[0]
     args.logfile = args.logfile[0]
+    return args
 
-    if os.path.isdir(os.path.realpath(args.files_path)):
-        wrkdir = os.path.realpath(args.files_path)
+def do_action(parsed_args, func, *args):
+    arg_name = func.__name__
+    act_past_name = arg_name + 'ed' if arg_name[-1] <> 'e' else arg_name + 'd'
+    act_prog_name = arg_name + 'ing' if arg_name[-1] <> 'e' else arg_name[0:-1] + 'ing'
+    if parsed_args.dryrun:
+        print("DryRun : file to be {} : {}".format(act_past_name, arg_name))
+    else:
+        remove = input("{} file '{}' ? : ".format(act_prog_name, arg_name)) in ('o', 'O', 'y', 'Y') if not parsed_args.yes else parsed_args.yes
+        if remove:
+            if parsed_args.verbose:
+                verbose("{} file : ", arg_name)
+            func(*args)
+
+def main(arguments):
+    parsed_args = parseargs(arguments)
+    ## mean if set to slient mode, never print verbose / just print logs
+    debug = parsed_args.verbose and not parsed_args.silent
+    ################################
+    ## Check config / parameters file
+    if os.path.isdir(os.path.realpath(parsed_args.files_path)):
+        wrkdir = os.path.realpath(parsed_args.files_path)
     else:
         write_defaultconfig()
-        raise ValueError(args.files_path + " does'nt exist.\nDefault example config file have been written")
-
-    if args.config_rules != None and os.path.exists(os.path.realpath(args.config_rules.name)):
-        SetOfRules = read_config(os.path.realpath(args.config_rules.name), setOfRules='MyRules')
+        raise ValueError(parsed_args.files_path + " does'nt exist.\nDefault example config file have been written")
+    if parsed_args.config_rules != None and os.path.exists(os.path.realpath(parsed_args.config_rules.name)):
+        SetOfRules = read_config(os.path.realpath(parsed_args.config_rules.name), setOfRules='MyRules')
     else:
         raise ValueError('config_Rules File does not exist')
 
-    archdir = os.path.realpath(SetOfRules.dir_to_archive_files if SetOfRules.dir_to_archive_files else args.archdir)
+    ## get archive directory if required
+    archdir = os.path.realpath(SetOfRules.dir_to_archive_files if SetOfRules.dir_to_archive_files else parsed_args.archdir)
     if not os.path.exists(os.path.realpath(archdir)):
         try:
-            os.mkdir(archdir)
+            do_action(parsed_args, os.mkdir, archdir)
         except:
             raise ValueError("archive dir : " + archdir + " cannot find or create dir")
 
-    basename = args.invariant
-    print("args namespace=", args)
-    print('working dir=', wrkdir, "\narchive dir=", archdir)
-    print('basename=', basename)
+    ## set the pattern of the file name to check-out
+    basename = parsed_args.invariant
+    verbose(("parsed_args namespace=", parsed_args), True, debug)
+    verbose(('working dir=', wrkdir, "\narchive dir=", archdir) , True, debug)
+    verbose(('basename=', basename), True, debug)
+
+    ## for testing purpose ...
     # flist = generate_test_list(basename, nbdays=1000, dayh=[2, 10, 13, 16])
     # test_create_file_list(flist, wrkdir)
+    ##################################
+    ## Get full list of file to check
     flist_from_dir = get_file_list(wrkdir)
     if len(flist_from_dir) == 0:
-        print(wrkdir+ " is empty Nothing to do !")
+        verbose(wrkdir + " is empty -> Nothing to do !", False, debug)
         exit(0)
-    # printlist(flist_from_dir, enum=True)
+    else:
+        verbose(flist_from_dir, True, debug)
+    ## filtering files corresonding to given file pattern
     flist_basename = [e for e in flist_from_dir if not (re.search(basename, e) == None)]
-    # printlist(flist_basename)
+    verbose(flist_basename, True, debug)
+    ## generate list of file's object for each filered filename
     tobj = collections.namedtuple('tupleobj', 'uid objfn')
-    # then making a sorted list of tuple (uid, ojb) to be manipulated easily
+    ## then making a sorted list of tuple (uid, ojb) to be manipulated easily
     olist = [tobj(int(o.uid), o) for o in [obj_fname(fn, basename) for fn in flist_basename]]
     olist = sorted(olist, key=lambda tuplefn: tuplefn.uid, reverse=True)
+    verbose(olist, True, debug)
 
-    # printlist(olist, enum=True)
-    # 1) chesk all the ruels to apply and calculate the stat and period of time of the rule ..
-    # i.e. for dayly rule, if keep = 10, means that first date is le proxiest one ans last date will be 10 days before
-    # doing the same for every rules
+    ## 1) chesk all the ruels to apply and calculate the stat and period of time of the rule ..
+    ## i.e. for dayly rule, if keep = 10, means that first date is le proxiest one ans last date will be 10 days before
+    ## doing the same for every rules
     compute_start_end_dates(SetOfRules, olist[0].objfn)
-    # aplying to set_of_rules : returnin a tuple ao set of uid
+    # applying to set_of_rules : returning a tuple ao set of uid
     uids2keep, uids2del = set_2keep_2del(olist, SetOfRules)
 
     print_report_header("IUDS  to keep")
@@ -738,14 +770,22 @@ def main(arguments):
     logging.info("keeped list of {0} file(s) : {1}".format(len(uids2keep), ', '.join([str(uid) for uid in uids2keep])))
 
     # doing last job : moving the files
-    if not args.testrules:
+    if not parsed_args.testrules:
         failed = done = []
         d_olist = dict(olist)
         for uid in uids2del:
             _filename = os.path.join(wrkdir, d_olist[uid].filename)
             if SetOfRules.delete_files:
                 try:
-                    os.remove(_filename)
+                    do_action(parsed_args, os.remove, _filename, _filename, 'remove', 'removed', 'removing')
+                    # if parsed_args.dryrun:
+                    #     print("DryRun : file to be removed : ", _filename)
+                    # else:
+                    #     remove = input("Removing file '%s' ? : " % (_filename)) in ('o', 'O', 'y', 'Y') if not parsed_args.yes else parsed_args.yes
+                    #     if remove:
+                    #         if parsed_args.verbose:
+                    #             verbose("Removing file : ", _filename)
+                    #         os.remove(_filename)
                 except PermissionError:
                     failed.append(fileobj)
                     raise ErrorValue("permission denied")
@@ -753,12 +793,19 @@ def main(arguments):
                     done.append(_filename)
             elif SetOfRules.dir_to_archive_files:
                 try:
-                    shutil.move(os.path.join(os.getcwd(), _filename),
-                                os.path.join(os.getcwd(),
+                    do_action(parsed_args, shutil.move,
+                              os.path.join(os.getcwd(), _filename),
+                              os.path.join(os.getcwd(),
                                              SetOfRules.dir_to_archive_files,
                                              os.path.basename(_filename)
-                                             )
-                                )
+                                           )
+                              )
+                    # shutil.move(os.path.join(os.getcwd(), _filename),
+                    #             os.path.join(os.getcwd(),
+                    #                          SetOfRules.dir_to_archive_files,
+                    #                          os.path.basename(_filename)
+                    #                          )
+                    #             )
                 except PermissionError:
                     failed.append(_filename)
                     return "permission denied"

@@ -215,6 +215,9 @@ class obj_fname(object):
         self.h, self.mm, self.s = 0, 0, 0
         self.dbname = basename
         self.uid = False
+        self.eow = self.end_of_week(self.date)
+        self.eom = self.end_of_month(self.date)
+        self.eoy = True if self.end_of_year(self.date)
         if fname and basename:
             self.set_extract_values(fname, basename)
 
@@ -231,9 +234,17 @@ class obj_fname(object):
             # self.time_str = ''.join(datetime_list[3:])
             self.uid = int(self.datetime.strftime('%Y%m%d%H%M%S'))
 
-    def get_uid_from_datetime(_dt):
-        if _dt:
-            return int(_dt.strftime('%Y%m%d%H%M%S'))
+    def get_uid_from_datetime(dt):
+        return int(dt.strftime('%Y%m%d%H%M%S')) if dt else False
+
+    def end_of_week(dt):
+        return dt.isoweekday() == 7 if dt else False
+
+    def end_of_month(dt):
+        return dt.month != (dt + datetime.timedelta(days=1)).month if dt else False
+
+    def end_of_year(dt):
+        return dt.year != (dt + datetime.timedelta(days=1)).year if dt else False
 
 
 class rule(object):
@@ -360,6 +371,7 @@ def printlist(l, enum=False, recur=False):
     else:
         for e in l:
             print(e)
+
 
 def get_default_conf():
     parser = configparser.ConfigParser()
@@ -604,7 +616,8 @@ def set_2keep_2del(olist, setofrule):
         cur_startdate, cur_enddate = rule.get_startdate(uid_format=False), rule.get_enddate(uid_format=False)
         # cur_obj_set = set of list of [uid] filtering on all obj-file 'olist'
         # keep all the files between dates
-        cur_rule_list = sorted([o for o in olist if cur_startdate >= o.objfn.datetime >= cur_enddate], key=lambda o: o.uid)
+        cur_rule_list = sorted([o for o in olist if cur_startdate >= o.objfn.datetime >= cur_enddate],
+                               key=lambda o: o.uid)
         # on crée une liste des période unique en fonction de la regle (jour pour daylyn semaine pour week ..)
         d_period = {}
         if rule.type == 'day':
@@ -612,35 +625,38 @@ def set_2keep_2del(olist, setofrule):
             for day in days:
                 d_period[day] = sorted([o for o in cur_rule_list if o.objfn.datetime.day == day], key=lambda o: o.uid)
 
-        elif rule.type == 'week': # isocalendar()[1] return the week number in the year
+        elif rule.type == 'week':  # isocalendar()[1] return the week number in the year
             weeks = sorted(list(set([o.objfn.datetime.isocalendar()[1] for o in cur_rule_list])))
             for week in weeks:
-                d_period[week] = sorted([o for o in cur_rule_list if o.objfn.datetime.isocalendar()[1] == week], key=lambda o: o.uid)
+                d_period[week] = sorted([o for o in cur_rule_list if o.objfn.datetime.isocalendar()[1] == week],
+                                        key=lambda o: o.uid)
 
         elif rule.type == 'month':
             monthes = sorted(list(set([o.objfn.datetime.month for o in cur_rule_list])))
             for month in monthes:
-                d_period[month] = sorted([o for o in cur_rule_list if o.objfn.datetime.month == month], key=lambda o: o.uid)
+                d_period[month] = sorted([o for o in cur_rule_list if o.objfn.datetime.month == month],
+                                         key=lambda o: o.uid)
 
         elif rule.type == 'year':
             years = sorted(list(set([o.objfn.datetime.year for o in cur_rule_list])))
             for year in years:
-                d_period[year] = sorted([o for o in cur_rule_list if o.objfn.datetime.year == year], key=lambda o: o.uid)
+                d_period[year] = sorted([o for o in cur_rule_list if o.objfn.datetime.year == year],
+                                        key=lambda o: o.uid)
 
         # applying the policy, regarding rule's policy
         rule_policy = rule.get_policy()
         to_keep[rule.type] = []
         if rule_policy == 'first':
-            for period in d_period.keys(): # make the list of all the first
+            for period in d_period.keys():  # make the list of all the first
                 to_keep[rule.type] += [d_period[period][0].uid]
         elif rule_policy == 'last':
-            for period in d_period.keys(): # make the list of all the last
+            for period in d_period.keys():  # make the list of all the last
                 to_keep[rule.type] += [d_period[period][-1].uid]
         elif rule_policy == 'first_last':
-            for period in d_period.keys(): # make the list of all the last
+            for period in d_period.keys():  # make the list of all the last
                 to_keep[rule.type] += [d_period[period][0].uid] + [d_period[period][-1].uid]
         else:  # mean 'all_items'
-            for period in d_period.keys(): # make the list of all
+            for period in d_period.keys():  # make the list of all
                 to_keep[rule.type] += [o.uid for o in d_period[period]]
 
         print_report_header("File to keep for " + rule.type)
@@ -670,16 +686,21 @@ def print_report_header(message, length=40):
     print(message)
     print('*' * length)
 
- def parseargs(args):
+
+def parseargs(args):
     parser = argparse.ArgumentParser(
         description="Apply some rules (default or stored) to manage rolling backup file on days,weeks,monthes ans years",
         formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('-n', '--invariant', help="Name of the file backuped inside all current backup file's name", nargs=1)
+    parser.add_argument('-n', '--invariant', help="Name of the file backuped inside all current backup file's name",
+                        nargs=1)
     parser.add_argument('-b', '--files_path', help="Path to directory containing the files backuped", nargs=1)
-    parser.add_argument('-r', '--config_rules', help="Name of the file containing rules", type=argparse.FileType('r'), nargs=1)
+    parser.add_argument('-r', '--config_rules', help="Name of the file containing rules", type=argparse.FileType('r'),
+                        nargs=1)
     parser.add_argument('-d', '--defaultrules', help="Display default rules", action='store_true')
-    parser.add_argument('-t', '--dryrun', help="Dry run : test rules and display result on console", action='store_true')
-    parser.add_argument('-a', '--archdir', help="set archive path for non deletion option", nargs=1, default='./archived')
+    parser.add_argument('-t', '--dryrun', help="Dry run : test rules and display result on console",
+                        action='store_true')
+    parser.add_argument('-a', '--archdir', help="set archive path for non deletion option", nargs=1,
+                        default='./archived')
     parser.add_argument('-l', '--logfile', help="log file",
                         default=sys.stdout, type=argparse.FileType('w'), nargs=1)
     parser.add_argument('-v', '--verbose', help="log file", action='store_true')
@@ -692,25 +713,28 @@ def print_report_header(message, length=40):
     args.logfile = args.logfile[0]
     return args
 
+
 def do_action(parsed_args, func, *args):
     arg_name = func.__name__
-    act_past_name = arg_name + 'ed' if arg_name[-1] <> 'e' else arg_name + 'd'
-    act_prog_name = arg_name + 'ing' if arg_name[-1] <> 'e' else arg_name[0:-1] + 'ing'
+    act_past_name = arg_name + 'ed' if arg_name[-1] != 'e' else arg_name + 'd'
+    act_prog_name = arg_name + 'ing' if arg_name[-1] != 'e' else arg_name[0:-1] + 'ing'
     if parsed_args.dryrun:
         print("DryRun : file to be {} : {}".format(act_past_name, arg_name))
     else:
-        remove = input("{} file '{}' ? : ".format(act_prog_name, arg_name)) in ('o', 'O', 'y', 'Y') if not parsed_args.yes else parsed_args.yes
+        remove = input("{} file '{}' ? : ".format(act_prog_name, arg_name)) in (
+            'o', 'O', 'y', 'Y') if not parsed_args.yes else parsed_args.yes
         if remove:
             if parsed_args.verbose:
                 verbose("{} file : ", arg_name)
             func(*args)
 
+
 def main(arguments):
     parsed_args = parseargs(arguments)
-    ## mean if set to slient mode, never print verbose / just print logs
+    # mean if set to slient mode, never print verbose / just print logs
     debug = parsed_args.verbose and not parsed_args.silent
     ################################
-    ## Check config / parameters file
+    # Check config / parameters file
     if os.path.isdir(os.path.realpath(parsed_args.files_path)):
         wrkdir = os.path.realpath(parsed_args.files_path)
     else:
@@ -721,25 +745,27 @@ def main(arguments):
     else:
         raise ValueError('config_Rules File does not exist')
 
-    ## get archive directory if required
-    archdir = os.path.realpath(SetOfRules.dir_to_archive_files if SetOfRules.dir_to_archive_files else parsed_args.archdir)
+    # get archive directory if required
+    archdir = os.path.realpath(
+        SetOfRules.dir_to_archive_files if SetOfRules.dir_to_archive_files else parsed_args.archdir)
     if not os.path.exists(os.path.realpath(archdir)):
         try:
             do_action(parsed_args, os.mkdir, archdir)
         except:
             raise ValueError("archive dir : " + archdir + " cannot find or create dir")
 
-    ## set the pattern of the file name to check-out
+    # set the pattern of the file name to check-out
     basename = parsed_args.invariant
     verbose(("parsed_args namespace=", parsed_args), True, debug)
-    verbose(('working dir=', wrkdir, "\narchive dir=", archdir) , True, debug)
+    verbose(('working dir=', wrkdir, "\narchive dir=", archdir), True, debug)
     verbose(('basename=', basename), True, debug)
 
-    ## for testing purpose ...
-    # flist = generate_test_list(basename, nbdays=1000, dayh=[2, 10, 13, 16])
-    # test_create_file_list(flist, wrkdir)
+    # for testing purpose ...
+    flist = generate_test_list(basename, nbdays=1000, dayh=[2, 10, 13, 16])
+    test_create_file_list(flist, wrkdir)
+
     ##################################
-    ## Get full list of file to check
+    # Get full list of file to check
     flist_from_dir = get_file_list(wrkdir)
     if len(flist_from_dir) == 0:
         verbose(wrkdir + " is empty -> Nothing to do !", False, debug)
@@ -770,7 +796,7 @@ def main(arguments):
     logging.info("keeped list of {0} file(s) : {1}".format(len(uids2keep), ', '.join([str(uid) for uid in uids2keep])))
 
     # doing last job : moving the files
-    if not parsed_args.testrules:
+    if not parsed_args.dryrun:
         failed = done = []
         d_olist = dict(olist)
         for uid in uids2del:
@@ -796,8 +822,8 @@ def main(arguments):
                     do_action(parsed_args, shutil.move,
                               os.path.join(os.getcwd(), _filename),
                               os.path.join(os.getcwd(),
-                                             SetOfRules.dir_to_archive_files,
-                                             os.path.basename(_filename)
+                                           SetOfRules.dir_to_archive_files,
+                                           os.path.basename(_filename)
                                            )
                               )
                     # shutil.move(os.path.join(os.getcwd(), _filename),
@@ -821,6 +847,7 @@ def main(arguments):
 
 
 if __name__ == '__main__':
-    sys.exit(main("-t -r ./check_bckp_file.conf -l log.log -n E12_LABSED2019-04-prod.zip -b ./test_dir".split(" ")))
+    sys.exit(main("-r ./check_bckp_file.conf -l log.log -n E12_LABSED2019-04-prod.zip -b ./test_dir".split(" ")))
+    # sys.exit(main("-t -r ./check_bckp_file.conf -l log.log -n E12_LABSED2019-04-prod.zip -b ./test_dir".split(" ")))
 else:
     sys.exit(main(sys.argv[1:]))

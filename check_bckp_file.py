@@ -204,7 +204,7 @@ def verbose(what, enum=False, log=False, recur=False):
         pass
 
 
-class obj_fname(object):
+class Obj_Fname(object):
 
     def __init__(self, fname=False, basename=False):
         self.filename = fname
@@ -247,7 +247,7 @@ class obj_fname(object):
         return dt.year != (dt + datetime.timedelta(days=1)).year if dt else False
 
 
-class rule(object):
+class Rule(object):
 
     def __init__(self, _name=False, _type=False, _number=False, _params=False):
         self.name = _name
@@ -286,13 +286,13 @@ class rule(object):
 
     def get_startdate(self, uid_format=False):
         if uid_format:
-            return obj_fname.get_uid_from_datetime(self.start_date)
+            return Obj_Fname.get_uid_from_datetime(self.start_date)
         else:
             return self.start_date
 
     def get_enddate(self, uid_format=False):
         if uid_format:
-            return obj_fname.get_uid_from_datetime(self.end_date)
+            return Obj_Fname.get_uid_from_datetime(self.end_date)
         else:
             return self.end_date
 
@@ -300,7 +300,7 @@ class rule(object):
         return self.policy if self.policy is not None else 'last'
 
 
-class set_of_rules(object):
+class Set_of_Rules(object):
     align_calendar = True
     delete_files = False
     dir_to_archive_files = False
@@ -315,7 +315,7 @@ class set_of_rules(object):
     def check_args(self, rule=None, type=False, name=False):
         if rule != None:
             if not isinstance(rule, rule):
-                raise TypeError("An instancied object of class 'rule' need to be passed")
+                raise TypeError("An instancied object of class 'Rule' need to be passed")
         if type:
             if type not in self.period_name.values():
                 raise ValueError("erreur de type de regle \n must be in ['day', 'week', 'month', 'year']")
@@ -326,9 +326,9 @@ class set_of_rules(object):
 
     def add_rule(self, _name, _type, _rule=None):
         if _name == False:
-            _name = set_of_rules.period_name[_type]
+            _name = Set_of_Rules.period_name[_type]
         elif self.check_args(type=_type):
-            _rule = _rule if _rule != None else rule(_name, _type)
+            _rule = _rule if _rule != None else Rule(_name, _type)
             self.dictOfRules[_rule.type] = {_rule.name: _rule}
             print(self.dictOfRules)
 
@@ -419,7 +419,7 @@ def read_config(filename='check_bckp_file.conf', setOfRules='Rules'):
 
     config = configparser.ConfigParser()
     config.read(filename)
-    s_of_r = set_of_rules(setOfRules)
+    s_of_r = Set_of_Rules(setOfRules)
     # type = {'params':'param', 'dayly': 'day', 'weekly': 'week', 'monthly': 'month', 'yearly': 'year'}
     for section in config.sections():
         if section == 'params':
@@ -431,7 +431,7 @@ def read_config(filename='check_bckp_file.conf', setOfRules='Rules'):
             cur_rule = s_of_r.get_rule(_name=section, _type=s_of_r.period_name[section])
             for option in config[section]:
                 setattr(cur_rule, option, get_val_typed(section, option))
-                print('rule:', cur_rule.name, 'option:', option + ':', cur_rule.__getattribute__(option))
+                print('Rule:', cur_rule.name, 'option:', option + ':', cur_rule.__getattribute__(option))
 
     # print('defined rules:', s_of_r.setname, '\n day :', s_of_r.day_define, \
     #                         '\n week :', s_of_r.week_define, \
@@ -446,7 +446,7 @@ def write_defaultconfig(filename='check_bckp_file.conf'):
         config.write(configfile)
 
 
-def compute_start_end_dates(sor: set_of_rules, first_objfn: obj_fname):
+def compute_start_end_dates(sor: Set_of_Rules, first_objfn: Obj_Fname):
     """ Compute first more prox date and last far date from begining"""
     isocal = {'curyear': 0, 'weeknum': 1, 'weekday': 2}
     if sor.start_yesterday:
@@ -594,8 +594,8 @@ def set_2keep_2del(olist, setofrule):
     """"prendre un jeu de regeles l'une après l'autre,
     pour :  - traiter la règle journalière, puis semaine, mois, etc
     it is important to note that the loop if on all the olist list,
-    some file may be used in more tha one rule : i.e. the las 'dayly' rule's file
-    may be also the first of weekly rule. If dayly computing take thos fileof the original olist,
+    some file may be used in more tha one Rule : i.e. the las 'dayly' Rule's file
+    may be also the first of weekly Rule. If dayly computing take thos fileof the original olist,
     then another one will be abnormally kept in its place.
     retourne un tuple de set"""
 
@@ -604,12 +604,12 @@ def set_2keep_2del(olist, setofrule):
 
     s_o_r = setofrule.get_list_of_rules()
 
-    # compute the 2keep dict = {key=rule.type(i.e. : day, week,..), value=list of obj_file}
+    # compute the 2keep dict = {key=Rule.type(i.e. : day, week,..), value=list of obj_file}
     to_keep = {}  #
     for rule in s_o_r:
         # 1) adding the new list if key doesn't exist in dict
-        # then : computing the intervals of date and the rule's policy on which one to keep (first, last, ..)
-        # then : for each rule , buiding a dict of {'rule_type': set(of uids of onj_file)}
+        # then : computing the intervals of date and the Rule's policy on which one to keep (first, last, ..)
+        # then : for each Rule , buiding a dict of {'rule_type': set(of uids of onj_file)}
         if rule.type not in to_keep.keys():
             to_keep[rule.type] = []
 
@@ -643,7 +643,7 @@ def set_2keep_2del(olist, setofrule):
                 d_period[year] = sorted([o for o in cur_rule_list if o.objfn.datetime.year == year],
                                         key=lambda o: o.uid)
 
-        # applying the policy, regarding rule's policy
+        # applying the policy, regarding Rule's policy
         rule_policy = rule.get_policy()
         to_keep[rule.type] = []
         if rule_policy == 'first':
@@ -661,7 +661,7 @@ def set_2keep_2del(olist, setofrule):
 
         print_report_header("File to keep for " + rule.type)
         printlist(to_keep[rule.type], True)
-    # end of for rule in s_o_r:
+    # end of for Rule in s_o_r:
 
     # then making to set of uids : 2keep, 2del.
     # 2 keep = union(set in the dict)
@@ -778,15 +778,15 @@ def main(arguments):
     ## generate list of file's object for each filered filename
     tobj = collections.namedtuple('tupleobj', 'uid objfn')
     ## then making a sorted list of tuple (uid, ojb) to be manipulated easily
-    olist = [tobj(int(o.uid), o) for o in [obj_fname(fn, basename) for fn in flist_basename]]
+    olist = [tobj(int(o.uid), o) for o in [Obj_Fname(fn, basename) for fn in flist_basename]]
     olist = sorted(olist, key=lambda tuplefn: tuplefn.uid, reverse=True)
     verbose(olist, True, debug)
 
-    ## 1) chesk all the ruels to apply and calculate the stat and period of time of the rule ..
-    ## i.e. for dayly rule, if keep = 10, means that first date is le proxiest one ans last date will be 10 days before
+    ## 1) chesk all the ruels to apply and calculate the stat and period of time of the Rule ..
+    ## i.e. for dayly Rule, if keep = 10, means that first date is le proxiest one ans last date will be 10 days before
     ## doing the same for every rules
     compute_start_end_dates(SetOfRules, olist[0].objfn)
-    # applying to set_of_rules : returning a tuple ao set of uid
+    # applying to Set_of_Rules : returning a tuple ao set of uid
     uids2keep, uids2del = set_2keep_2del(olist, SetOfRules)
 
     print_report_header("IUDS  to keep")

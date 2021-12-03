@@ -215,9 +215,9 @@ class Obj_Fname(object):
         self.h, self.mm, self.s = 0, 0, 0
         self.dbname = basename
         self.uid = False
-        self.eow = self.end_of_week(self.date)
-        self.eom = self.end_of_month(self.date)
-        self.eoy = True if self.end_of_year(self.date)
+        self.eow = self.is_end_of_week(self.date)
+        self.eom = self.is_end_of_month(self.date)
+        self.eoy = self.is_end_of_year(self.date)
         if fname and basename:
             self.set_extract_values(fname, basename)
 
@@ -237,14 +237,14 @@ class Obj_Fname(object):
     def get_uid_from_datetime(dt):
         return int(dt.strftime('%Y%m%d%H%M%S')) if dt else False
 
-    def end_of_week(dt):
+    def is_end_of_week(self, dt):
         return dt.isoweekday() == 7 if dt else False
 
-    def end_of_month(dt):
-        return dt.month != (dt + datetime.timedelta(days=1)).month if dt else False
+    def is_end_of_month(self, dt):
+        return dt.month != (dt + timedelta(days=1)).month if dt else False
 
-    def end_of_year(dt):
-        return dt.year != (dt + datetime.timedelta(days=1)).year if dt else False
+    def is_end_of_year(self, dt):
+        return dt.year != (dt + timedelta(days=1)).year if dt else False
 
 
 class Rule(object):

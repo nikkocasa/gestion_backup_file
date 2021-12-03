@@ -706,6 +706,7 @@ def parseargs(args):
     parser.add_argument('-v', '--verbose', help="log file", action='store_true')
     parser.add_argument('-s', '--silent', help="do not ask validation for actions", action='store_false')
     parser.add_argument('--yes', help="Accept all action (not recommended)", action='store_false')
+    parser.add_argument('-f', '--file_list', help="file name of the file containing files name to treat")
     args = parser.parse_args(args)
     args.config_rules = args.config_rules[0]
     args.files_path = args.files_path[0]
@@ -761,7 +762,15 @@ def main(arguments):
     verbose(('basename=', basename), True, debug)
 
     # for testing purpose ...
-    flist = generate_test_list(basename, nbdays=1000, dayh=[2, 10, 13, 16])
+    if parsed_args.file_list:
+        try:
+            with open(parsed_args.file_list, 'r') as file_2_list:
+                flist = [line.strip().split('/')[-1] for line in file_2_list]
+                # read all the lines, skip \n at end of line, and take only last part of the path
+        except:
+            raise ValueError("File list of files name : " + parsed_args.file_list + " cannot be found")
+    else:
+        flist = generate_test_list(basename, nbdays=1000, dayh=[2, 10, 13, 16])
     test_create_file_list(flist, wrkdir)
 
     ##################################
@@ -847,7 +856,8 @@ def main(arguments):
 
 
 if __name__ == '__main__':
-    sys.exit(main("-r ./check_bckp_file.conf -l log.log -n E12_LABSED2019-04-prod.zip -b ./test_dir".split(" ")))
-    # sys.exit(main("-t -r ./check_bckp_file.conf -l log.log -n E12_LABSED2019-04-prod.zip -b ./test_dir".split(" ")))
+    sys.exit(main(
+        "-r ./check_bckp_file.conf -l log.log -n E12_LABSED2019-04-prod.zip -b ./test_dir -f   lsdirlistbkp.txt".split()))
+    # sys.exit(main("-t -r ./check_bckp_file.conf -l log.log -n E12_LABSED2019-04-prod.zip -b ./test_dir".split()))
 else:
-    sys.exit(main(sys.argv[1:]))
+    sys.exit(main(" ".join(sys.argv[1:]).split()))

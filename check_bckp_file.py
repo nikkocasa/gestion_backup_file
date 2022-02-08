@@ -698,8 +698,8 @@ def parseargs(args):
     parser.add_argument('-b', '--files_path', help="Path to directory containing the files backuped", nargs=1)
     parser.add_argument('-r', '--config_rules', help="Name of the file containing rules", type=argparse.FileType('r'),
                         nargs=1)
-    parser.add_argument('-d', '--defaultrules', help="Display default rules", action='store_true')
-    parser.add_argument('-t', '--dryrun', help="Dry run : test rules and display result on console",
+    parser.add_argument('-D', '--defaultrules', help="Display default rules", action='store_true')
+    parser.add_argument('-d', '--dryrun', help="Dry run : test rules and display result on console",
                         action='store_true')
     parser.add_argument('-a', '--archdir', help="set archive path for non deletion option", nargs=1,
                         default='./archived')

@@ -830,7 +830,8 @@ def main(arguments):
                               os.path.join(os.getcwd(),
                                            SetOfRules.dir_to_archive_files,
                                            os.path.basename(_filename)
-                                           )
+                                          )
+                              )
                 except PermissionError:
                     failed.append(_filename)
                     return "permission denied"

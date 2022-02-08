@@ -783,19 +783,19 @@ def main(arguments):
         exit(0)
     else:
         verbose(flist_from_dir, True, debug)
-    ## filtering files corresonding to given file pattern
+    # filtering files corresponding to given file pattern
     flist_basename = [e for e in flist_from_dir if not (re.search(basename, e) == None)]
     verbose(flist_basename, True, debug)
-    ## generate list of file's object for each filered filename
+    # generate list of file's object for each filered filename
     tobj = collections.namedtuple('tupleobj', 'uid objfn')
-    ## then making a sorted list of tuple (uid, ojb) to be manipulated easily
+    # then making a sorted list of tuple (uid, ojb) to be manipulated easily
     olist = [tobj(int(o.uid), o) for o in [Obj_Fname(fn, basename) for fn in flist_basename]]
     olist = sorted(olist, key=lambda tuplefn: tuplefn.uid, reverse=True)
     verbose(olist, True, debug)
 
-    ## 1) chesk all the ruels to apply and calculate the stat and period of time of the Rule ..
-    ## i.e. for dayly Rule, if keep = 10, means that first date is le proxiest one ans last date will be 10 days before
-    ## doing the same for every rules
+    # 1) check all the rules to apply and calculate the stat and period of time of the Rule ..
+    # i.e. for daily Rule, if keep = 10, means that first date is le proxies one and last date will be 10 days before
+    # doing the same for every rules
     compute_start_end_dates(SetOfRules, olist[0].objfn)
     # applying to Set_of_Rules : returning a tuple ao set of uid
     uids2keep, uids2del = set_2keep_2del(olist, SetOfRules)
@@ -857,9 +857,12 @@ def main(arguments):
             printlist(failed)
 
 
-if __name__ == '__main__':
+if __name__ != '__main__':
     sys.exit(main(
         "-r ./check_bckp_file.conf -l log.log -n E12_LABSED2019-04-prod.zip -b ./test_dir -f   lsdirlistbkp.txt".split()))
     # sys.exit(main("-t -r ./check_bckp_file.conf -l log.log -n E12_LABSED2019-04-prod.zip -b ./test_dir".split()))
 else:
-    sys.exit(main(" ".join(sys.argv[1:]).split()))
+    args = " ".join(sys.argv[1:]).split()
+    sys.exit(main(args if args != [] else ['-h']))
+    # sys.exit(main(" ".join(sys.argv[1:]).split()))
+

@@ -539,13 +539,15 @@ def compute_start_end_dates(sor: Set_of_Rules, first_objfn: Obj_Fname):
 
             cur_rule.last_list = []
             for i in range(0, int(cur_rule.keep_iso)):
-                dt = relativedelta(years=i)
-                cur_rule.last_list.append((cur_start_date - dt).replace(hour=23, minute=59, second=59))
+                cur_rule.last_list.append(datetime(cur_start_date.year - i, 12, 31, 23, 59, 59))
+                # dt = relativedelta(years=i)
+                # cur_rule.last_list.append((cur_start_date - dt).replace(hour=23, minute=59, second=59))
                 print('last years: \t', cur_rule.last_list[-1])
             cur_rule.first_list = []
-            for i in range(0, int(cur_rule.keep_iso)):
-                dt = relativedelta(year=i, month=1, day=1)
-                cur_rule.first_list.append((cur_end_date + dt).replace(hour=0, minute=0, second=0))
+            for i in range(0, int(cur_rule.keep_iso) - 1):
+                cur_rule.first_list.append(datetime(cur_start_date.year - i, 1, 1, 0,0,0))
+                # dt = relativedelta(year=i, month=1, day=1)
+                # cur_rule.first_list.append((cur_end_date + dt).replace(hour=0, minute=0, second=0))
                 print('first years: \t', cur_rule.first_list[-1])
 
         cur_rule.start_date, cur_rule.end_date = cur_start_date, cur_end_date

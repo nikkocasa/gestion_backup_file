@@ -810,19 +810,14 @@ def main(arguments):
     if not parsed_args.dryrun:
         failed = done = []
         d_olist = dict(olist)
+        for uid in uids2keep:
+            print(os.system('lsattr '+ os.path.join(wrkdir, d_olist[uid].filename)))
+            os.system('sudo chattr +u ' + os.path.join(wrkdir, d_olist[uid].filename))
         for uid in uids2del:
             _filename = os.path.join(wrkdir, d_olist[uid].filename)
             if SetOfRules.delete_files:
                 try:
                     do_action(parsed_args, os.remove, _filename, _filename, 'remove', 'removed', 'removing')
-                    # if parsed_args.dryrun:
-                    #     print("DryRun : file to be removed : ", _filename)
-                    # else:
-                    #     remove = input("Removing file '%s' ? : " % (_filename)) in ('o', 'O', 'y', 'Y') if not parsed_args.yes else parsed_args.yes
-                    #     if remove:
-                    #         if parsed_args.verbose:
-                    #             verbose("Removing file : ", _filename)
-                    #         os.remove(_filename)
                 except PermissionError:
                     failed.append(fileobj)
                     raise ErrorValue("permission denied")
@@ -836,13 +831,6 @@ def main(arguments):
                                            SetOfRules.dir_to_archive_files,
                                            os.path.basename(_filename)
                                            )
-                              )
-                    # shutil.move(os.path.join(os.getcwd(), _filename),
-                    #             os.path.join(os.getcwd(),
-                    #                          SetOfRules.dir_to_archive_files,
-                    #                          os.path.basename(_filename)
-                    #                          )
-                    #             )
                 except PermissionError:
                     failed.append(_filename)
                     return "permission denied"
